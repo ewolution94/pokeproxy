@@ -1,0 +1,13 @@
+{
+  "id": "/",
+  "name": "PokeProxy",
+  "short_name": "PokeProxy",
+  "description": "Printable sheets of Pokémon card proxies at the real card size, for the binder.",
+  "lang": "en",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f4f1",
+  "theme_color": "#f5f4f1",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

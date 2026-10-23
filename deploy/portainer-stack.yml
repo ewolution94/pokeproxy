@@ -1,0 +1,46 @@
+# The PokeProxy stack Portainer runs on the NAS.
+#
+# This is deliberately NOT the repo's docker-compose.yml. That one carries `build: .`,
+# which would make Portainer compile the app on the NAS instead of pulling the image
+# CI already published. Paste this into Portainer's stack editor (or point a
+# Git-backed stack at this file), never that one.
+#
+# Auto-updates come from the shared Watchtower stack (development/.claude/skills/portainer/watchtower/),
+# which only touches containers carrying the label below. With it, a push to `release`
+# is the entire deploy.
+
+services:
+  pokeproxy:
+    image: ghcr.io/ewolution94/pokeproxy:latest
+    container_name: pokeproxy
+    restart: unless-stopped
+    healthcheck:
+      # Every ~13 minutes, each container on its own interval so they never line up (plans/nas-load.md).
+      interval: 796s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    ports:
+      # The port from the registry (development/.claude/skills/portainer/ports.json).
+      - "7100:7100"
+    environment:
+      - PORT=7100
+      - TZ=Europe/Berlin
+      # The card catalogue is read from TCGSL's snapshot, over the `ewolution` network; the
+      # pictures the page shows still come from TCGSL's public address.
+      - POKEPROXY_TCGSL=http://tcgsl:5700
+      # Visit counts: /_e and /_e.js are forwarded to Census over the `ewolution` network.
+      # Remove the line to stop counting; the page doesn't change either way.
+      - POKEPROXY_CENSUS=http://census:4901
+    networks:
+      # The shared network TCGSL and Census listen on. It must exist before this stack is
+      # created (Portainer → Networks → `ewolution`).
+      - ewolution
+    labels:
+      # The opt-in the shared Watchtower looks for (it runs with
+      # WATCHTOWER_LABEL_ENABLE=true, so unlabelled containers are never touched).
+      - "com.centurylinklabs.watchtower.enable=true"
+
+networks:
+  ewolution:
+    external: true
