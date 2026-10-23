@@ -91,6 +91,12 @@ export function createLocalized({ catalog, fetchJSON = getJSON }) {
       if (!theirs) return null;
       return (await setCards(lang, theirs)).get(numberKey(key)) ?? null;
     },
+    /** The languages TCGdex has a picture of the card `ref` in. */
+    async available(ref) {
+      const langs = Object.keys(LOCAL_LANGS);
+      const found = await Promise.all(langs.map((l) => this.find(ref, l).catch(() => null)));
+      return langs.filter((_, i) => found[i]);
+    },
   };
 }
 

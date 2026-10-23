@@ -4,6 +4,50 @@
 export type PaperId = 'a4' | 'a3' | 'a5' | 'letter' | 'legal';
 export type PrintStyle = 'colour' | 'grey' | 'light';
 
+/** How a card's label looks: a dark or a light pill, a band across the card, or a rubber stamp. */
+export type LabelLook = 'dark' | 'light' | 'band' | 'stamp';
+
+/** A card's label (its language and note, printed on its face): its look, size, tilt and place. */
+export interface Label {
+  look: LabelLook;
+  /** The text's height, in millimetres. */
+  size: number;
+  /** Degrees, clockwise. */
+  angle: number;
+  /** The label's centre, as a fraction of the card's width and height. */
+  x: number;
+  y: number;
+}
+
+/** Large enough to read from arm's length, over the illustration. */
+export const DEFAULT_LABEL: Label = { look: 'dark', size: 5, angle: 0, x: 0.5, y: 0.3 };
+export const LABEL_SIZE = { min: 2.5, max: 14 };
+export const LABEL_ANGLE = 60;
+export const LABEL_LOOKS: LabelLook[] = ['dark', 'light', 'band', 'stamp'];
+
+const clampNum = (n: unknown, min: number, max: number, fallback: number) => {
+  const v = Number(n);
+  return Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
+};
+
+/** A label as it can be drawn: known look, size and tilt in range, centre on the card. */
+export function cleanLabel(raw: unknown): Label {
+  const l = (raw && typeof raw === 'object' ? raw : {}) as Partial<Label>;
+  return {
+    look: LABEL_LOOKS.includes(l.look as LabelLook) ? (l.look as LabelLook) : DEFAULT_LABEL.look,
+    size: Math.round(clampNum(l.size, LABEL_SIZE.min, LABEL_SIZE.max, DEFAULT_LABEL.size) * 10) / 10,
+    angle: Math.round(clampNum(l.angle, -LABEL_ANGLE, LABEL_ANGLE, DEFAULT_LABEL.angle)),
+    x: clampNum(l.x, 0.05, 0.95, DEFAULT_LABEL.x),
+    y: clampNum(l.y, 0.05, 0.95, DEFAULT_LABEL.y),
+  };
+}
+
+/** Within a few degrees of a multiple of 15, a turned label snaps to it. */
+export function snapAngle(deg: number, within = 4): number {
+  const near = Math.round(deg / 15) * 15;
+  return Math.abs(deg - near) <= within ? near : Math.round(deg);
+}
+
 export const PAPERS: Record<PaperId, { w: number; h: number; label: string }> = {
   a4: { w: 210, h: 297, label: 'A4' },
   a3: { w: 297, h: 420, label: 'A3' },
@@ -35,6 +79,8 @@ export interface Setup {
   marks: boolean;
   ruler: boolean;
   style: PrintStyle;
+  /** Every label's look, unless a card has its own. */
+  label: Label;
 }
 
 export const DEFAULT_SETUP: Setup = {
@@ -47,6 +93,7 @@ export const DEFAULT_SETUP: Setup = {
   marks: true,
   ruler: true,
   style: 'grey',
+  label: DEFAULT_LABEL,
 };
 
 export interface Cell {

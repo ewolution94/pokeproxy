@@ -16,9 +16,9 @@
   import Plus from '@lucide/svelte/icons/plus';
   import Trash from '@lucide/svelte/icons/trash-2';
   import { pictureOf, sheet, type Card } from '../lib/sheet.svelte.ts';
-  import { badgeText } from '../lib/languages.ts';
+  import { labelLines } from '../lib/languages.ts';
   import { retry } from '../lib/retry.ts';
-  import { PAPERS, filterFor } from '../lib/layout.ts';
+  import { LABEL_ANGLE, LABEL_SIZE, PAPERS, cleanLabel, filterFor, snapAngle, type Label } from '../lib/layout.ts';
   import { fileUrl } from '../lib/files.svelte.ts';
   import { t } from '../lib/i18n/index.svelte.ts';
   import { toast } from '../../vendor/ewo/elements/toaster.js';
@@ -130,6 +130,79 @@
   }
 
   $effect(() => endDrag);
+
+  // A label being moved, turned or sized on the selected card: drawn from here until the pointer
+  // lets go, then kept. While it follows the sheet's look, every such label moves with it.
+  let live = $state<{ uid: string; shared: boolean; look: Label } | null>(null);
+  let box = $state({ w: 0, h: 0 });
+
+  const labelFor = (card: Card): Label =>
+    live && (live.shared ? !card.label : card.uid === live.uid) ? live.look : sheet.labelOf(card);
+
+  /** Reports the selected card's label size (unturned), for its handles. */
+  function measure(node: HTMLElement, on: boolean) {
+    let active = on;
+    const ro = new ResizeObserver(() => active && (box = { w: node.offsetWidth, h: node.offsetHeight }));
+    ro.observe(node);
+    if (active) box = { w: node.offsetWidth, h: node.offsetHeight };
+    return {
+      update(next: boolean) {
+        active = next;
+        if (active) box = { w: node.offsetWidth, h: node.offsetHeight };
+      },
+      destroy: () => ro.disconnect(),
+    };
+  }
+
+  function labelDown(e: PointerEvent, i: number, mode: 'move' | 'turn' | 'size') {
+    const card = sheet.slots[i];
+    if (!card || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const slot = (e.currentTarget as HTMLElement).closest<HTMLElement>('.slot');
+    if (!slot) return;
+    const r = slot.getBoundingClientRect();
+    const start = sheet.labelOf(card);
+    const centre = () => [r.left + (live?.look.x ?? start.x) * r.width, r.top + (live?.look.y ?? start.y) * r.height];
+    const [cx0, cy0] = centre();
+    const d0 = Math.max(8, Math.hypot(e.clientX - cx0, e.clientY - cy0));
+    live = { uid: card.uid, shared: !card.label, look: { ...start } };
+    const id = e.pointerId;
+    const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== id || !live) return;
+      let look: Label;
+      if (mode === 'move') {
+        look = { ...live.look, x: start.x + (ev.clientX - e.clientX) / r.width, y: start.y + (ev.clientY - e.clientY) / r.height };
+      } else if (mode === 'turn') {
+        const [cx, cy] = centre();
+        const deg = (Math.atan2(ev.clientY - cy, ev.clientX - cx) * 180) / Math.PI + 90;
+        const wrapped = ((deg + 540) % 360) - 180;
+        look = { ...live.look, angle: Math.max(-LABEL_ANGLE, Math.min(LABEL_ANGLE, snapAngle(wrapped))) };
+      } else {
+        const [cx, cy] = centre();
+        const ratio = Math.hypot(ev.clientX - cx, ev.clientY - cy) / d0;
+        look = { ...live.look, size: Math.max(LABEL_SIZE.min, Math.min(LABEL_SIZE.max, Math.round(start.size * ratio * 2) / 2)) };
+      }
+      live = { ...live, look: cleanLabel(look) };
+    };
+    const end = (ev: PointerEvent | KeyboardEvent) => {
+      if ('pointerId' in ev && ev.pointerId !== id) return;
+      if ('key' in ev && ev.key !== 'Escape') return;
+      if (live && !('key' in ev)) {
+        const at = sheet.slots.findIndex((c) => c?.uid === live!.uid);
+        if (at >= 0) sheet.setLabel(at, live.look);
+      }
+      live = null;
+      removeEventListener('pointermove', move);
+      removeEventListener('pointerup', end);
+      removeEventListener('pointercancel', end);
+      removeEventListener('keydown', end);
+    };
+    addEventListener('pointermove', move);
+    addEventListener('pointerup', end);
+    addEventListener('pointercancel', end);
+    addEventListener('keydown', end);
+  }
 
   // Pictures from the desktop still come by the browser's drag and drop.
   function fileOver(e: DragEvent, i: number) {
@@ -278,8 +351,22 @@
                   <img src={src} alt="" draggable="false" use:retry style:filter={filterFor(sheet.styleOf(card))} />
                 {/if}
                 {#if card.tag || card.note}
-                  <!-- The language the proxy stands for, printed on its face so it survives the cut. -->
-                  <span class="badge">{badgeText(card.tag, card.note)}</span>
+                  {@const look = labelFor(card)}
+                  <!-- The language the proxy stands for and its note, printed on its face so they
+                       survive the cut; clipped to the card, so a band ends at its edges. -->
+                  <span class="face" aria-hidden="true">
+                    <span
+                      class="sticker look-{look.look}"
+                      style:left="{look.x * 100}%"
+                      style:top="{look.y * 100}%"
+                      style:--size={look.size}
+                      style:--angle="{look.angle}deg"
+                      style:--cw={g.cw}
+                      use:measure={sheet.selected === i}
+                    >
+                      <span class="txt">{#each labelLines(card.tag, card.note) as line, n (n)}<span class="line">{line}</span>{/each}</span>
+                    </span>
+                  </span>
                 {/if}
               {:else}
                 <span class="empty" aria-hidden="true">
@@ -288,6 +375,25 @@
                 </span>
               {/if}
             </button>
+            {#if card && sheet.selected === i && (card.tag || card.note)}
+              {@const look = labelFor(card)}
+              <!-- Handles for the selected card's label: drag it to move it, the round handle turns
+                   it, the corner one sizes it. -->
+              <span
+                class="handles"
+                class:busy={!!live}
+                style:left="{look.x * 100}%"
+                style:top="{look.y * 100}%"
+                style:width="{look.look === 'band' ? Math.min(box.w, g.cw * scale) : box.w}px"
+                style:height="{box.h}px"
+                style:--angle="{look.angle}deg"
+                role="presentation"
+                onpointerdown={(e) => labelDown(e, i, 'move')}
+              >
+                <span class="turn" role="presentation" title={t('label.turn')} onpointerdown={(e) => labelDown(e, i, 'turn')}></span>
+                <span class="grow" role="presentation" title={t('label.grow')} onpointerdown={(e) => labelDown(e, i, 'size')}></span>
+              </span>
+            {/if}
             {#if card && sheet.selected === i}
               <button type="button" class="remove" title={t('card.remove')} aria-label={t('card.remove')} onclick={() => remove(i)}>
                 <X size={13} strokeWidth={2.4} aria-hidden="true" />
@@ -495,23 +601,122 @@
     outline-offset: 2px;
   }
 
-  /* Above the card's bottom line (its number, the illustrator), over the weakness bar's edge. */
-  .badge {
+  .face {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+
+  /* A label: its size and tilt in millimetres and degrees, centred on its place on the card. Large
+     on purpose: it has to be read in the binder, not to match the artwork. */
+  .sticker {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    width: max-content;
+    padding: calc(var(--size) * 0.24 * var(--mm)) calc(var(--size) * 0.62 * var(--mm));
+    transform: translate(-50%, -50%) rotate(var(--angle));
+    font: 700 calc(var(--size) * var(--mm)) / 1.12 var(--ewo-sans);
+    letter-spacing: 0.005em;
+    text-align: center;
+  }
+
+  /* The language on one line, the note on the next; neither breaks inside itself. */
+  .txt {
+    display: grid;
+    justify-items: center;
+  }
+
+  .line {
+    white-space: nowrap;
+  }
+
+  .look-dark {
+    border-radius: calc(var(--size) * 0.75 * var(--mm));
+    background: rgb(17 17 17 / 0.9);
+    color: #fff;
+  }
+
+  .look-light {
+    border-radius: calc(var(--size) * 0.75 * var(--mm));
+    background: rgb(255 255 255 / 0.95);
+    color: #111;
+    box-shadow: 0 0 0 calc(0.3 * var(--mm)) rgb(17 17 17 / 0.7);
+  }
+
+  /* A band right across the card, ends cut off by the card's edge; tilted, a sash. */
+  .look-band {
+    width: calc(var(--cw) * 1.9 * var(--mm));
+    max-width: none;
+    padding-inline: 0;
+    background: rgb(17 17 17 / 0.88);
+    color: #fff;
+  }
+
+  .look-stamp {
+    border: calc(var(--size) * 0.16 * var(--mm)) solid currentColor;
+    border-radius: calc(var(--size) * 0.3 * var(--mm));
+    background: rgb(255 255 255 / 0.84);
+    color: #b3261e;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* The selected label's frame and handles, the same size and tilt as the label, never printed. */
+  .handles {
+    position: absolute;
+    z-index: 3;
+    box-sizing: border-box;
+    transform: translate(-50%, -50%) rotate(var(--angle));
+    border: 1.5px dashed var(--ewo-project-pokeproxy);
+    border-radius: 6px;
+    cursor: move;
+    touch-action: none;
+  }
+
+  .turn,
+  .grow {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--ewo-project-pokeproxy);
+    background: #fff;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+    touch-action: none;
+  }
+
+  /* The turn handle sits above the label on a short stem. */
+  .turn {
+    left: 50%;
+    top: -26px;
+    margin-left: -7px;
+    border-radius: 50%;
+    cursor: grab;
+  }
+
+  .turn::after {
+    content: '';
     position: absolute;
     left: 50%;
-    bottom: calc(7.5 * var(--mm));
-    translate: -50% 0;
-    max-width: 88%;
-    overflow: hidden;
-    padding: calc(0.45 * var(--mm)) calc(1.5 * var(--mm));
-    border-radius: 999px;
-    background: rgb(17 17 17 / 0.86);
-    color: #fff;
-    font: 600 calc(2.2 * var(--mm)) / 1.25 var(--ewo-sans);
-    letter-spacing: 0.01em;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    pointer-events: none;
+    top: 12px;
+    width: 1.5px;
+    height: 12px;
+    margin-left: -0.75px;
+    background: var(--ewo-project-pokeproxy);
+  }
+
+  .grow {
+    right: -8px;
+    bottom: -8px;
+    border-radius: 3px;
+    cursor: nwse-resize;
+  }
+
+  .handles.busy,
+  .handles.busy .turn {
+    cursor: grabbing;
   }
 
   .slot.dragging {
@@ -632,6 +837,7 @@
     .page-head,
     .add-page,
     .ghost,
+    .handles,
     .remove,
     .toobig {
       display: none !important;

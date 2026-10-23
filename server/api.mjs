@@ -5,7 +5,8 @@
 //   POST /api/link  { "url": "…" }                 a pasted link: a card or a set (JSON), or the
 //                                                  picture it points at (the bytes, image/*)
 //   GET  /api/local?ref=sv3pt5/6&lang=de           the card's picture in that language, if TCGdex
-//                                                  has one (localized.mjs)
+//                                                  has one (localized.mjs); lang=all: the languages
+//                                                  it has one in
 
 import { LinkError, resolveLink } from './link.mjs';
 
@@ -90,13 +91,13 @@ export function createApi({ catalog, localized, resolve = resolveLink }) {
       }
       const ref = (url.searchParams.get('ref') ?? '').slice(0, 80);
       const lang = (url.searchParams.get('lang') ?? '').slice(0, 10);
-      let local = null;
       try {
-        local = await localized.find(ref, lang);
+        if (lang === 'all') json(res, 200, { langs: await localized.available(ref) });
+        else json(res, 200, { local: await localized.find(ref, lang) });
       } catch (err) {
         console.error('local:', err.message);
+        json(res, 200, lang === 'all' ? { langs: [] } : { local: null });
       }
-      json(res, 200, { local });
       return true;
     }
 

@@ -3,7 +3,7 @@
 // so changing the paper or the card size flows the cards onto the new pages in the same order.
 // Everything is kept on this device (localStorage; uploaded pictures in IndexedDB, files.svelte.ts).
 
-import { DEFAULT_SETUP, PAPERS, clampSize, layout, locate, padToPages, trimPages, type PrintStyle, type Setup } from './layout.ts';
+import { DEFAULT_SETUP, PAPERS, cleanLabel, clampSize, layout, locate, padToPages, trimPages, type Label, type PrintStyle, type Setup } from './layout.ts';
 
 export interface Card {
   uid: string;
@@ -32,6 +32,8 @@ export interface Card {
   local?: { lang: string; name: string; image: string } | null;
   /** Show the catalogue's picture even though a localized one exists. */
   original?: boolean;
+  /** This card's own label look; the sheet's (setup.label) when absent. */
+  label?: Label | null;
 }
 
 /** The picture a card shows and prints (an uploaded or fetched one comes from files.svelte.ts). */
@@ -39,7 +41,7 @@ export const pictureOf = (c: Card) => (c.local && c.local.lang === c.tag && !c.o
 
 const KEY = 'pokeproxy:sheet';
 /** The note's length: it shares the badge with the language. */
-export const NOTE_MAX = 28;
+export const NOTE_MAX = 40;
 const STYLES: PrintStyle[] = ['colour', 'grey', 'light'];
 
 export const uid = () => (crypto.randomUUID?.() ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`);
@@ -56,6 +58,7 @@ function cleanSetup(raw: any): Setup {
     marks: s.marks !== false,
     ruler: s.ruler !== false,
     style: STYLES.includes(s.style) ? s.style : DEFAULT_SETUP.style,
+    label: cleanLabel(s.label),
   };
 }
 
@@ -81,6 +84,7 @@ function cleanCard(raw: any): Card | null {
         ? { lang: String(raw.local.lang), name: String(raw.local.name ?? ''), image: raw.local.image }
         : null,
     original: !!raw.original,
+    label: raw.label ? cleanLabel(raw.label) : null,
   };
 }
 
@@ -259,6 +263,29 @@ class Sheet {
 
   #remember() {
     this.#undo = this.slots.slice();
+  }
+
+  /** The look a card's label is drawn in: its own, or the sheet's. */
+  labelOf(card: Card): Label {
+    return card.label ?? this.setup.label;
+  }
+
+  /**
+   * Changes a card's label look: the card's own when it has one, otherwise every label's (the sheet's
+   * look, which every card without its own follows).
+   */
+  setLabel(index: number, patch: Partial<Label>) {
+    const card = this.slots[index];
+    if (!card) return;
+    if (card.label) this.update(index, { label: cleanLabel({ ...card.label, ...patch }) });
+    else this.setup = { ...this.setup, label: cleanLabel({ ...this.setup.label, ...patch }) };
+  }
+
+  /** Gives a card a look of its own (a copy of what it shows now), or returns it to the sheet's. */
+  ownLabel(index: number, own: boolean) {
+    const card = this.slots[index];
+    if (!card) return;
+    this.update(index, { label: own ? { ...this.labelOf(card) } : null });
   }
 
   /** The print style a card is printed in. */

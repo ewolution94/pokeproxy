@@ -2,7 +2,7 @@
 // layout.ts is TypeScript with nothing but erasable types, so Node runs it as it is.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_SETUP, MARGIN, RULER, filterFor, layout, padToPages, trimPages } from '../src/lib/layout.ts';
+import { DEFAULT_LABEL, DEFAULT_SETUP, LABEL_ANGLE, LABEL_SIZE, MARGIN, RULER, cleanLabel, filterFor, layout, padToPages, snapAngle, trimPages } from '../src/lib/layout.ts';
 
 const setup = (patch = {}) => ({ ...DEFAULT_SETUP, ...patch });
 
@@ -101,3 +101,28 @@ test('print styles', () => {
   assert.equal(filterFor('grey'), 'grayscale(1)');
   assert.match(filterFor('light'), /^grayscale\(1\) contrast/);
 });
+
+test('a label is cleaned into range: known look, size, tilt, centre on the card', () => {
+  assert.deepEqual(cleanLabel(undefined), DEFAULT_LABEL);
+  assert.deepEqual(cleanLabel({ look: 'neon', size: 99, angle: -200, x: 3, y: -1 }), {
+    look: 'dark',
+    size: LABEL_SIZE.max,
+    angle: -LABEL_ANGLE,
+    x: 0.95,
+    y: 0.05,
+  });
+  assert.equal(cleanLabel({ size: 6.26 }).size, 6.3);
+  assert.equal(cleanLabel({ look: 'stamp' }).look, 'stamp');
+  assert.equal(cleanLabel({ size: 'big' }).size, DEFAULT_LABEL.size);
+  // The sheet's setup carries a label from the start, so every card has one to follow.
+  assert.deepEqual(DEFAULT_SETUP.label, DEFAULT_LABEL);
+});
+
+test('a turned label snaps to multiples of 15° when close', () => {
+  assert.equal(snapAngle(-28), -30);
+  assert.equal(snapAngle(13), 15);
+  assert.equal(snapAngle(22), 22);
+  assert.equal(snapAngle(0.4), 0);
+  assert.equal(snapAngle(-7.6), -8);
+});
+

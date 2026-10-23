@@ -1,4 +1,4 @@
-// The languages Pokémon cards are printed in, as a card's tag on the sheet: the badge printed on it
+// The languages Pokémon cards are printed in, as a card's tag on the sheet: the label printed on it
 // says which version the proxy stands in for ("DE · Deutsch"). `local` marks the ones TCGdex has
 // pictures for (server/localized.mjs): a tagged catalogue card shows that picture when there is one.
 
@@ -33,8 +33,8 @@ const BY_CODE = new Map(LANGUAGES.map((l) => [l.code, l]));
 
 export const language = (code: string | null | undefined) => (code ? BY_CODE.get(code) : undefined);
 
-/** The badge's text: "DE · Deutsch", with the note after it ("DE · Deutsch · 1st Edition"). */
-export function badgeText(tag: string | null | undefined, note: string | null | undefined): string {
+/** The label's lines: the language ("DE · Deutsch"), then the note ("1st Edition"). */
+export function labelLines(tag: string | null | undefined, note: string | null | undefined): string[] {
   const l = language(tag);
-  return [l ? `${l.short} · ${l.name}` : '', note?.trim() ?? ''].filter(Boolean).join(' · ');
+  return [l ? `${l.short} · ${l.name}` : '', note?.trim() ?? ''].filter(Boolean);
 }
