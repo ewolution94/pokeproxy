@@ -2,7 +2,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { LinkError, checkTarget, isPublicAddress, known, pagePicture, publicLookup, resolveLink, sniffImage } from '../server/link.mjs';
+import { LinkError, checkTarget, isPublicAddress, known, pagePicture, publicLookup, refererFor, resolveLink, sniffImage } from '../server/link.mjs';
 import { createApi } from '../server/api.mjs';
 
 const catalog = {
@@ -60,6 +60,14 @@ test('known addresses become catalogue cards without a fetch', () => {
   assert.equal(k('https://images.pokemontcg.io/xx1/7.png').fetch, 'https://images.pokemontcg.io/xx1/7_hires.png');
   assert.equal(k('https://images.scrydex.com/pokemon/zz1-3/small').fetch, 'https://images.scrydex.com/pokemon/zz1-3/large');
   assert.equal(k('https://example.com/card.png'), null);
+});
+
+test('Cardmarket’s image servers get a cardmarket.com referrer, nobody else gets one', () => {
+  // Its CloudFront answers 403 without it (the user's copied picture address, 2026-10-23).
+  assert.equal(refererFor('product-images.s3.cardmarket.com'), 'https://www.cardmarket.com/');
+  assert.equal(refererFor('marketplace-article-scans.s3.cardmarket.com'), 'https://www.cardmarket.com/');
+  assert.equal(refererFor('cardmarket.com.evil.example'), null);
+  assert.equal(refererFor('images.pokemontcg.io'), null);
 });
 
 test('a page’s link-preview picture and title', () => {
@@ -123,6 +131,7 @@ test('POST /api/link answers a picture as its bytes, with the name in a header',
 test('POST /api/link: a set, an error, a bad body', async () => {
   assert.deepEqual(await (await post({ url: 'https://a.example/set' })).json(), { set: { id: 'sv3pt5', name: '151', lang: 'en' } });
   const none = await post({ url: 'https://a.example/x' });
+  // Never a 5xx for a page that wouldn't give a picture: Cloudflare replaces those with its own.
   assert.equal(none.status, 422);
   assert.deepEqual(await none.json(), { error: 'no-image' });
   assert.equal((await post('not json')).status, 400);

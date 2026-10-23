@@ -18,6 +18,15 @@ import net from 'node:net';
 import zlib from 'node:zlib';
 
 const UA = 'Mozilla/5.0 (compatible; PokeProxy/1.0; +https://pokeproxy.ewolution.cloud)';
+
+/**
+ * Image servers that only answer requests coming from their own site. Cardmarket's product
+ * pictures (product-images.s3.cardmarket.com, behind CloudFront) answer 403 without a cardmarket.com
+ * referrer and 200 with one; the address someone copies from a product page is one of these.
+ */
+export function refererFor(host) {
+  return /(^|\.)cardmarket\.com$/i.test(host) ? 'https://www.cardmarket.com/' : null;
+}
 const MAX_PAGE = 2 * 1024 * 1024;
 const MAX_IMAGE = 15 * 1024 * 1024;
 const TIMEOUT = 10_000;
@@ -106,7 +115,13 @@ export function guardedGet(raw, { max, accept, deadline = Date.now() + TIMEOUT, 
       url,
       {
         lookup: publicLookup,
-        headers: { 'user-agent': UA, accept, 'accept-encoding': 'gzip, deflate, br', 'accept-language': 'en,de;q=0.8' },
+        headers: {
+          'user-agent': UA,
+          accept,
+          'accept-encoding': 'gzip, deflate, br',
+          'accept-language': 'en,de;q=0.8',
+          ...(refererFor(url.hostname) ? { referer: refererFor(url.hostname) } : {}),
+        },
         timeout: left,
       },
       (res) => {
