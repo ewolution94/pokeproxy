@@ -30,6 +30,22 @@ equals. "umbreon vmax", "151 6", "MEW 199/165", "151 jp 6" and katakana (or hira
 The pictures come straight from TCGSL: 240 px thumbnails in the results, the 734 px version
 (about 300 dpi on a 63 mm card) on the sheet.
 
+**Names in every language.** A Japanese card's name is Japanese (リザードンex), and a German
+collector types Glurak. `server/species.json` holds every Pokémon's name in English, Japanese,
+German, French, Italian, Spanish, Korean and both Chinese scripts (from PokéAPI's open data,
+`npm run species` rebuilds it); each card is matched to its Pokémon (whole English words, the
+longest Japanese name it contains), so "charizard" finds the Japanese Charizards, "glurak" or 리자몽
+the English ones, and a Japanese result shows its Pokémon's English name.
+
+**Languages on the sheet.** A card can carry the language it stands for (`src/lib/languages.ts`)
+and a short note ("1st Edition"); both print as a badge on its face, so they survive the cut.
+"In other languages" adds the same card once per language. For German, French, Italian, Spanish,
+Portuguese and Traditional Chinese, `server/localized.mjs` looks the card up on TCGdex (sets
+matched to TCGSL's by name, a set's cards kept for a day) and the card shows that language's
+picture where TCGdex has one (600 × 825, about 240 dpi on a card); a switch keeps the original.
+TCGdex has those pictures mostly from 2010/2011 on (French from Base Set), Korean and Simplified
+Chinese hardly any (`learnings/scraping-and-data.md` in the workspace).
+
 **Links** (`server/link.mjs`). Addresses it knows become catalogue cards without a fetch: TCGSL's
 pictures and set pages, pokemontcg.io's and Scrydex's image servers, Limitless TCG's card pages
 (English and Japanese, by set code and number). Anything else is fetched once: a picture as it is,
@@ -38,8 +54,9 @@ back to the page, which keeps them like an upload, so a sheet never depends on a
 fetch only reaches public addresses on ports 80 and 443 (checked on the address it connects to, at
 every redirect), gives up after 10 s, reads at most 2 MB of a page and 15 MB of a picture, and
 accepts only PNG, JPEG, WebP, GIF and AVIF by their bytes. Sixty links per visitor per ten
-minutes, four at a time in all. Sites behind bot protection (Cardmarket) don't answer: copying
-the picture's address there works. `⌘V` on the sheet pastes a link or a picture into the selected
+minutes, four at a time in all. Cardmarket's pages don't answer, but a picture address copied from
+one does: its image servers get a cardmarket.com referrer, without which they refuse. Those
+pictures are small (255 px wide); the card panel says what a picture of its own prints at. `⌘V` on the sheet pastes a link or a picture into the selected
 slot; pictures dropped on a slot land there.
 
 **Uploads** never leave the device.
@@ -76,6 +93,8 @@ server/server.mjs     static files, security headers, the API, Census
 server/api.mjs        /api/search, /api/status, /api/link
 server/catalog.mjs    TCGSL's snapshot in memory, and the search
 server/link.mjs       pasted links: known addresses, guarded fetches, og:image
+server/localized.mjs  a card's picture in another language, from TCGdex
+server/species.json   every Pokémon's name in nine languages (scripts/species.mjs)
 src/lib/layout.ts     paper, card size, grid, cut marks, scale check (millimetres)
 src/lib/sheet.svelte.ts  the setup and the slots, kept on the device
 src/components/       Header, Setup, Pages (the paper), Picker (Search, Link, Upload), Settings

@@ -6,6 +6,8 @@ import { createApi } from './server/api.mjs';
 import { createCatalog } from './server/catalog.mjs';
 // @ts-expect-error: as above
 import { createCensus } from './server/census.mjs';
+// @ts-expect-error: as above
+import { createLocalized } from './server/localized.mjs';
 
 // The dev server answers /api and Census's /_e with the same code as production; the catalogue
 // comes from the live TCGSL unless POKEPROXY_TCGSL names another.
@@ -14,7 +16,7 @@ function appRoutes(): Plugin {
     origin: process.env.POKEPROXY_TCGSL ?? 'https://tcgsl.ewolution.cloud',
     images: process.env.POKEPROXY_TCGSL_IMAGES ?? 'https://tcgsl.ewolution.cloud',
   });
-  const api = createApi({ catalog });
+  const api = createApi({ catalog, localized: createLocalized({ catalog }) });
   const census = createCensus({ site: 'pokeproxy' });
   let started = false;
   const middleware = async (req: any, res: any, next: (error?: unknown) => void) => {

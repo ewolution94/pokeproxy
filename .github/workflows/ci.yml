@@ -48,7 +48,7 @@ jobs:
           curl -sf http://127.0.0.1:7199/ | grep -q '<title>PokeProxy</title>'
           curl -sf http://127.0.0.1:7199/anything | grep -q '<title>PokeProxy</title>'
           curl -sI http://127.0.0.1:7199/ | grep -qi "content-security-policy: default-src 'self'"
-          curl -sI http://127.0.0.1:7199/ | grep -qi "img-src 'self' data: blob: https://tcgsl.ewolution.cloud"
+          curl -sI http://127.0.0.1:7199/ | grep -qi "img-src 'self' data: blob: https://tcgsl.ewolution.cloud https://assets.tcgdex.net"
           curl -sI http://127.0.0.1:7199/ | grep -qi "cache-control: no-cache"
           curl -sf http://127.0.0.1:7199/manifest.webmanifest | grep -q '"name": "PokeProxy"'
           curl -sf -o /dev/null http://127.0.0.1:7199/sw.js
@@ -62,6 +62,7 @@ jobs:
           curl -sf http://127.0.0.1:7199/api/status | grep -q '"ready":false'
           test "$(curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:7199/api/search?q=charizard')" = 503
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST --data '{"url":"https://example.com/"}' http://127.0.0.1:7199/api/link)" = 503
+          test "$(curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:7199/api/local?ref=sv3pt5/6&lang=de')" = 503
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:7199/api/nope)" = 404
           # The Census forwarder is wired in; without POKEPROXY_CENSUS it answers locally.
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:7199/_e.js)" = 200

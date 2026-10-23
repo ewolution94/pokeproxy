@@ -13,6 +13,8 @@ export interface CatalogCard {
   lang: 'en' | 'ja';
   setName: string;
   setCode: string;
+  /** For a Japanese card: the Pokémon's English name ("Charizard" for リザードンex). */
+  english?: string;
   year: string;
   thumb: string;
   image: string;
@@ -51,7 +53,7 @@ export async function searchCards(q: string, lang: Lang, offset: number, signal?
 /** A card's name; a Japanese card TCGdex lists without one goes by its set and number. */
 export const nameOf = (c: CatalogCard) => c.name || `${c.setName} ${c.number}`;
 
-export const metaOf = (c: CatalogCard) => [c.setName, c.number, c.year].filter(Boolean).join(' · ');
+export const metaOf = (c: CatalogCard) => [c.english, c.setName, c.number, c.year].filter(Boolean).join(' · ');
 
 export function fromCatalog(c: CatalogCard): Card {
   return { uid: uid(), source: 'catalog', name: nameOf(c), meta: metaOf(c), image: c.image, thumb: c.thumb, ref: c.id, lang: c.lang, style: null };
@@ -75,6 +77,9 @@ export async function readLink(url: string, signal?: AbortSignal): Promise<LinkR
     if (body.set) return { set: body.set };
     throw new ApiError(body.error ?? 'unreachable');
   }
+  // An answer that isn't ours (a proxy's error page) says only its status.
+  if (res.status === 503) throw new ApiError('busy');
+  if (res.status === 429) throw new ApiError('limit');
   if (!res.ok || !type.startsWith('image/')) throw new ApiError('unreachable');
   const blob = await res.blob();
   const name = decodeURIComponent(res.headers.get('x-card-name') ?? '') || hostOf(url);
@@ -82,9 +87,12 @@ export async function readLink(url: string, signal?: AbortSignal): Promise<LinkR
   return { card: { uid: uid(), source: 'link', name: tidy(name), meta: hostOf(url), file, link: url, style: null } };
 }
 
+/** The site a link is from: "cardmarket.com" for product-images.s3.cardmarket.com. */
 function hostOf(url: string) {
   try {
-    return new URL(url).hostname.replace(/^www\./, '');
+    const host = new URL(url).hostname;
+    const parts = host.split('.');
+    return parts.length > 2 && !/^\d+$/.test(parts[parts.length - 1]) ? parts.slice(-2).join('.') : host.replace(/^www\./, '');
   } catch {
     return '';
   }

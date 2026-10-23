@@ -15,7 +15,9 @@
   import X from '@lucide/svelte/icons/x';
   import Plus from '@lucide/svelte/icons/plus';
   import Trash from '@lucide/svelte/icons/trash-2';
-  import { sheet, type Card } from '../lib/sheet.svelte.ts';
+  import { pictureOf, sheet, type Card } from '../lib/sheet.svelte.ts';
+  import { badgeText } from '../lib/languages.ts';
+  import { retry } from '../lib/retry.ts';
   import { PAPERS, filterFor } from '../lib/layout.ts';
   import { fileUrl } from '../lib/files.svelte.ts';
   import { t } from '../lib/i18n/index.svelte.ts';
@@ -50,7 +52,7 @@
     return Math.max(0.8, Math.min(3.9, fit === 'width' ? byWidth : Math.min(byWidth, byHeight)));
   });
 
-  const srcOf = (c: Card) => (c.file ? fileUrl(c.file) : c.image);
+  const srcOf = (c: Card) => (c.file ? fileUrl(c.file) : pictureOf(c));
 
   // Carrying a card: where it came from, the slot under the pointer, and the picture that follows
   // the pointer (`carry`, moved by transform once per frame).
@@ -273,7 +275,11 @@
               {#if card}
                 {@const src = srcOf(card)}
                 {#if src}
-                  <img src={src} alt="" draggable="false" style:filter={filterFor(sheet.styleOf(card))} />
+                  <img src={src} alt="" draggable="false" use:retry style:filter={filterFor(sheet.styleOf(card))} />
+                {/if}
+                {#if card.tag || card.note}
+                  <!-- The language the proxy stands for, printed on its face so it survives the cut. -->
+                  <span class="badge">{badgeText(card.tag, card.note)}</span>
                 {/if}
               {:else}
                 <span class="empty" aria-hidden="true">
@@ -487,6 +493,25 @@
   .slot.filled.selected .hit {
     outline: 2px solid var(--ewo-project-pokeproxy);
     outline-offset: 2px;
+  }
+
+  /* Above the card's bottom line (its number, the illustrator), over the weakness bar's edge. */
+  .badge {
+    position: absolute;
+    left: 50%;
+    bottom: calc(7.5 * var(--mm));
+    translate: -50% 0;
+    max-width: 88%;
+    overflow: hidden;
+    padding: calc(0.45 * var(--mm)) calc(1.5 * var(--mm));
+    border-radius: 999px;
+    background: rgb(17 17 17 / 0.86);
+    color: #fff;
+    font: 600 calc(2.2 * var(--mm)) / 1.25 var(--ewo-sans);
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    pointer-events: none;
   }
 
   .slot.dragging {

@@ -4,6 +4,8 @@
 //   GET  /api/status                               whether the catalogue is in, and its size
 //   POST /api/link  { "url": "…" }                 a pasted link: a card or a set (JSON), or the
 //                                                  picture it points at (the bytes, image/*)
+//   GET  /api/local?ref=sv3pt5/6&lang=de           the card's picture in that language, if TCGdex
+//                                                  has one (localized.mjs)
 
 import { LinkError, resolveLink } from './link.mjs';
 
@@ -13,7 +15,9 @@ const LINKS_PER_WINDOW = 60;
 const WINDOW = 10 * 60_000;
 const AT_ONCE = 4;
 
-const STATUS = { invalid: 400, blocked: 400, set: 200, 'no-image': 422, 'too-big': 413, unreachable: 502, busy: 503, limit: 429 };
+// No 5xx for a page that wouldn't answer: Cloudflare swaps an origin's 502 for its own error page,
+// and the page would never see which error it was.
+const STATUS = { invalid: 400, blocked: 400, set: 200, 'no-image': 422, 'too-big': 413, unreachable: 422, busy: 503, limit: 429 };
 
 function json(res, status, body) {
   const text = JSON.stringify(body);
@@ -38,10 +42,10 @@ function readBody(req, max = 4096) {
 }
 
 /**
- * @param {{ catalog: ReturnType<typeof import('./catalog.mjs').createCatalog>, resolve?: typeof resolveLink }} options
+ * @param {{ catalog: ReturnType<typeof import('./catalog.mjs').createCatalog>, localized?: { find(ref: string, lang: string): Promise<any> }, resolve?: typeof resolveLink }} options
  * @returns {(req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => Promise<boolean>}
  */
-export function createApi({ catalog, resolve = resolveLink }) {
+export function createApi({ catalog, localized, resolve = resolveLink }) {
   // Who asked how often, in memory only and forgotten with the window: the address never leaves
   // this function (learnings/privacy-and-security.md).
   let window = Date.now();
@@ -76,6 +80,23 @@ export function createApi({ catalog, resolve = resolveLink }) {
       const found = catalog.search(q, { lang, offset, limit: LIMIT });
       if (!found) json(res, 503, { error: 'loading' });
       else json(res, 200, { ...found, offset, limit: LIMIT });
+      return true;
+    }
+
+    if (url.pathname === '/api/local' && req.method === 'GET' && localized) {
+      if (!catalog.ready) {
+        json(res, 503, { error: 'loading' });
+        return true;
+      }
+      const ref = (url.searchParams.get('ref') ?? '').slice(0, 80);
+      const lang = (url.searchParams.get('lang') ?? '').slice(0, 10);
+      let local = null;
+      try {
+        local = await localized.find(ref, lang);
+      } catch (err) {
+        console.error('local:', err.message);
+      }
+      json(res, 200, { local });
       return true;
     }
 

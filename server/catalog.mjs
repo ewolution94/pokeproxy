@@ -15,7 +15,11 @@
 // All or nothing: a load builds a whole new catalogue and swaps it in at the end, so a failed one
 // keeps the last good copy.
 
+import { readFileSync } from 'node:fs';
 import { withDeadline } from './deadline.mjs';
+
+/** Every Pokémon's name in the languages cards are printed in (scripts/species.mjs, from PokéAPI). */
+const SPECIES = JSON.parse(readFileSync(new URL('./species.json', import.meta.url), 'utf8'));
 
 const UA = 'pokeproxy (ewolution.cloud)';
 
@@ -47,13 +51,89 @@ export function printedNumber(number, printed) {
   return /^\d+$/.test(number) && printed ? `${number}/${String(printed).padStart(number.length, '0')}` : number;
 }
 
+/** Kana, CJK ideographs and Hangul: names written without spaces between words. */
+const CJK = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/;
+
+/**
+ * Finds the Pokémon a card is named after, in any language, so its name can be searched in the
+ * others: an English name is matched by whole words ("Mr. Mime", "Charizard ex"), a Japanese one by
+ * the katakana it contains (リザードンex, ピカチュウ&ゼクロムGX), longest name first, so Mewtwo's
+ * card isn't also Mew's.
+ * @param {{ langs: string[], species: string[][] }} table
+ */
+export function speciesMatcher(table) {
+  const en = table.langs.indexOf('en');
+  const ja = table.langs.indexOf('ja');
+  const latin = new Map();
+  const kana = [];
+  table.species.forEach((names, i) => {
+    const words = normalize(names[en]).split(' ').filter(Boolean);
+    if (words.length) {
+      const list = latin.get(words[0]) ?? [];
+      list.push({ words, i });
+      latin.set(words[0], list);
+    }
+    const k = normalize(names[ja] ?? '');
+    if (k) kana.push({ k, i });
+  });
+  for (const list of latin.values()) list.sort((a, b) => b.words.length - a.words.length);
+  kana.sort((a, b) => b.k.length - a.k.length);
+
+  /** The species in a card's normalized name. */
+  function find(n, lang) {
+    const found = new Set();
+    if (lang === 'ja') {
+      const taken = [];
+      for (const { k, i } of kana) {
+        let at = n.indexOf(k);
+        while (at >= 0) {
+          if (!taken.some(([a, b]) => at < b && at + k.length > a)) {
+            taken.push([at, at + k.length]);
+            found.add(i);
+          }
+          at = n.indexOf(k, at + 1);
+        }
+      }
+    } else {
+      const words = n.split(' ');
+      for (let w = 0; w < words.length; w++) {
+        const hit = (latin.get(words[w]) ?? []).find((c) => c.words.every((x, j) => words[w + j] === x));
+        if (hit) {
+          found.add(hit.i);
+          w += hit.words.length - 1;
+        }
+      }
+    }
+    return [...found];
+  }
+
+  /** The card's species' names in every language, as search words, and in English for showing. */
+  return function aliases(n, lang) {
+    const ids = find(n, lang);
+    if (!ids.length) return { words: [], cjk: [], english: '' };
+    const words = new Set();
+    const cjk = new Set();
+    for (const i of ids) {
+      for (const name of table.species[i]) {
+        if (!name) continue;
+        const m = normalize(name);
+        if (CJK.test(m)) cjk.add(m);
+        else for (const w of m.split(' ')) if (w) words.add(w);
+      }
+    }
+    return { words: [...words], cjk: [...cjk], english: ids.map((i) => table.species[i][en]).join(' & ') };
+  };
+}
+
 /**
  * Builds the entries from TCGSL's snapshot.
  * @param {{ sets: any[], lang: 'en' | 'ja' }[]} indexes
  * @param {Map<string, any[]>} cardsBySet  set id → TCGSL's card rows
+ * @param {{ langs: string[], species: string[][] }} [species]  the names table (species.json)
  * @returns {Entry[]}
  */
-export function buildEntries(indexes, cardsBySet) {
+export function buildEntries(indexes, cardsBySet, species = SPECIES) {
+  const aliasesOf = speciesMatcher(species);
   const entries = [];
   for (const { sets, lang } of indexes) {
     for (const s of sets) {
@@ -64,6 +144,7 @@ export function buildEntries(indexes, cardsBySet) {
       const setN = normalize(`${setName} ${s.ja ?? ''}`);
       for (const [key, number, name, rarity, price] of rows) {
         const n = normalize(name ?? '');
+        const alias = aliasesOf(n, lang);
         entries.push({
           id: `${s.id}/${key}`,
           set: s.id,
@@ -86,6 +167,9 @@ export function buildEntries(indexes, cardsBySet) {
           idN: s.id.toLowerCase().replace(/_ja$/, ''),
           keyN: numberKey(key),
           numN: numberKey(number),
+          aliasWords: alias.words,
+          aliasCjk: alias.cjk,
+          english: lang === 'ja' ? alias.english : '',
         });
       }
     }
@@ -119,18 +203,21 @@ export function parseQuery(q) {
   return { tokens, lang, whole: normalize(String(q).replace(/\b(en|english|jp|ja|japanese|jpn)\b/gi, '')) };
 }
 
-const CJK = /[぀-ヿ㐀-鿿]/;
-
 /** How well one word of the query fits a card; 0 when it doesn't. */
 function tokenScore(e, t) {
   let best = 0;
   const w = t.text;
   if (t.num != null && (e.keyN === t.num || e.numN === t.num)) best = 12 + (t.printed && t.printed === e.printed ? 6 : 0);
   if (t.printed) return best;
-  if (e.words.includes(w)) best = Math.max(best, 25);
+  // Kana and hanzi aren't split into words: a name holding the query is a full hit.
+  if (CJK.test(w) && e.n.includes(w)) best = Math.max(best, 25);
+  else if (e.words.includes(w)) best = Math.max(best, 25);
   else if (w.length >= 2 && e.words.some((x) => x.startsWith(w))) best = Math.max(best, 18);
-  else if (CJK.test(w) && e.n.includes(w)) best = Math.max(best, 25);
   else if (w.length >= 3 && e.n.includes(w)) best = Math.max(best, 8);
+  // The Pokémon's name in another language: "charizard" for リザードンex, "glurak" for Charizard ex.
+  else if (e.aliasWords.includes(w)) best = Math.max(best, 22);
+  else if (w.length >= 3 && e.aliasWords.some((x) => x.startsWith(w))) best = Math.max(best, 15);
+  else if (CJK.test(w) && e.aliasCjk.some((x) => x.includes(w))) best = Math.max(best, 22);
   if (e.codeN === w || e.idN === w) best = Math.max(best, 16);
   if (e.setN === w) best = Math.max(best, 16);
   else if (e.setWords.includes(w)) best = Math.max(best, 10);
@@ -265,6 +352,7 @@ export function createCatalog({ origin, images, refreshHours = 24, fetchJSON = g
       lang: e.lang,
       setName: e.setName,
       setCode: e.setCode,
+      english: e.english,
       year: e.date.slice(0, 4),
       thumb: `${pics}/img/card/${e.set}/${e.key}-240.webp`,
       image: `${pics}/img/card-hd/${e.set}/${e.key}-734.webp`,
@@ -299,6 +387,10 @@ export function createCatalog({ origin, images, refreshHours = 24, fetchJSON = g
       const n = numberKey(number);
       const e = entries.find((x) => x.lang === lang && (x.codeN === c || x.idN === c) && (x.keyN === n || x.numN === n));
       return e ? view(e) : null;
+    },
+    /** The English sets, for matching them to TCGdex's (localized.mjs). */
+    englishSets() {
+      return [...sets.values()].filter((s) => s.lang === 'en').map((s) => ({ id: s.id, name: s.name }));
     },
     /** A set by its id, for a link to a set page. */
     set(id) {

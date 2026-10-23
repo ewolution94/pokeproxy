@@ -1,7 +1,7 @@
 // The catalogue: built from TCGSL's snapshot (a small stand-in here), and searched.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildEntries, createCatalog, normalize, numberKey, parseQuery, printedNumber, search } from '../server/catalog.mjs';
+import { buildEntries, createCatalog, normalize, numberKey, parseQuery, printedNumber, search, speciesMatcher } from '../server/catalog.mjs';
 
 const EN = {
   built: '2026-10-22T00:00:00Z',
@@ -30,12 +30,26 @@ const CARDS = new Map([
   ['pmcg1_ja', [['6', '006', 'リザードン', '', 0]]],
 ]);
 
+// A few rows of the names table (server/species.json): en, ja, de, fr, it, es, ko, zh-hant, zh-hans.
+const SPECIES = {
+  langs: ['en', 'ja', 'de', 'fr', 'it', 'es', 'ko', 'zh-hant', 'zh-hans'],
+  species: [
+    ['Charizard', 'リザードン', 'Glurak', 'Dracaufeu', 'Charizard', 'Charizard', '리자몽', '噴火龍', '喷火龙'],
+    ['Mr. Mime', 'バリヤード', 'Pantimos', 'M. Mime', 'Mr. Mime', 'Mr. Mime', '마임맨', '魔牆人偶', '魔墙人偶'],
+    ['Umbreon', 'ブラッキー', 'Nachtara', 'Noctali', 'Umbreon', 'Umbreon', '블래키', '月亮伊布', '月亮伊布'],
+    ['Mew', 'ミュウ', 'Mew', 'Mew', 'Mew', 'Mew', '뮤', '夢幻', '梦幻'],
+    ['Mewtwo', 'ミュウツー', 'Mewtu', 'Mewtwo', 'Mewtwo', 'Mewtwo', '뮤츠', '超夢', '超梦'],
+    ['Flabébé', 'フラベベ', 'Flabébé', 'Flabébé', 'Flabébé', 'Flabébé', '플라베베', '花蓓蓓', '花蓓蓓'],
+  ],
+};
+
 const entries = buildEntries(
   [
     { sets: EN.sets, lang: 'en' },
     { sets: JA.sets, lang: 'ja' },
   ],
   CARDS,
+  SPECIES,
 );
 const names = (q, options) => search(entries, q, options).cards.map((e) => `${e.set}/${e.key}`);
 
@@ -58,11 +72,12 @@ test('Japanese sets without pictures are left out: nothing to print', () => {
 });
 
 test('a name: every card of it, newest set first', () => {
-  assert.deepEqual(names('charizard'), ['me55/4', 'xy12/11', 'base1/4', 'sv3pt5/6', 'sv3pt5/199', 'xy12/12']);
+  // The English cards by name; the Japanese one by its Pokémon (an alias), after them.
+  assert.deepEqual(names('charizard'), ['me55/4', 'xy12/11', 'base1/4', 'sv3pt5/6', 'sv3pt5/199', 'xy12/12', 'sv2a_ja/6']);
 });
 
 test('a name and a set', () => {
-  assert.deepEqual(names('charizard 151'), ['sv3pt5/6', 'sv3pt5/199']);
+  assert.deepEqual(names('charizard 151'), ['sv3pt5/6', 'sv3pt5/199', 'sv2a_ja/6']);
   assert.deepEqual(names('umbreon vmax'), ['swsh7/95', 'swsh7/215']);
   assert.deepEqual(names('umbreon evolving'), ['swsh7/95', 'swsh7/215']);
 });
@@ -87,10 +102,13 @@ test('punctuation and accents don’t matter', () => {
 
 test('Japanese cards: by set and number, in katakana or hiragana, or with jp in the query', () => {
   assert.deepEqual(names('151 jp 6'), ['sv2a_ja/6']);
-  assert.deepEqual(names('リザードン'), ['sv2a_ja/6']);
-  assert.deepEqual(names('りざーどん'), ['sv2a_ja/6']);
+  assert.equal(names('リザードン')[0], 'sv2a_ja/6');
+  assert.equal(names('りざーどん')[0], 'sv2a_ja/6');
+  assert.ok(names('リザードン').includes('sv3pt5/6'), 'the English Charizards by their Japanese name');
   assert.deepEqual(names('sv2a 1'), ['sv2a_ja/1']);
-  assert.ok(names('charizard', { lang: 'ja' }).length === 0);
+  // The Japanese cards by their Pokémon's English name (the bug the user found, 2026-10-23).
+  assert.deepEqual(names('charizard', { lang: 'ja' }), ['sv2a_ja/6']);
+  assert.deepEqual(names('charizard jp'), ['sv2a_ja/6']);
   assert.ok(names('6', { lang: 'en' }).every((id) => !id.endsWith('_ja/6')));
 });
 
@@ -135,3 +153,21 @@ test('parseQuery keeps the language words out of the search', () => {
     ['151', '6'],
   );
 });
+
+test('a card’s Pokémon in every other language: German, French, Korean, Chinese', () => {
+  for (const q of ['glurak', 'dracaufeu', '리자몽', '喷火龙', '噴火龍']) assert.ok(names(q).includes('sv3pt5/6'), q);
+  assert.deepEqual(names('pantimos'), ['sv3pt5/122']);
+  assert.deepEqual(names('nachtara vmax'), ['swsh7/95', 'swsh7/215']);
+});
+
+test('the matcher takes the longest name: Mewtwo isn’t Mew, Mr. Mime is two words', () => {
+  const aliases = speciesMatcher(SPECIES);
+  assert.equal(aliases(normalize('ミュウツーex'), 'ja').english, 'Mewtwo');
+  assert.equal(aliases(normalize('ミュウex'), 'ja').english, 'Mew');
+  assert.equal(aliases(normalize('Mr. Mime'), 'en').english, 'Mr. Mime');
+  assert.equal(aliases(normalize('Mewtwo & Mew-GX'), 'en').english, 'Mewtwo & Mew');
+  assert.equal(aliases(normalize('Professor’s Research'), 'en').english, '');
+  // A Japanese card shows its Pokémon's English name beside its own.
+  assert.equal(search(entries, 'リザードン', { lang: 'ja' }).cards[0].english, 'Charizard');
+});
+

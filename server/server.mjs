@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { createApi } from './api.mjs';
 import { createCatalog } from './catalog.mjs';
 import { createCensus } from './census.mjs';
+import { createLocalized } from './localized.mjs';
 
 const portFlag = process.argv.indexOf('--port');
 const PORT = Number(portFlag > -1 ? process.argv[portFlag + 1] : (process.env.PORT ?? 8080));
@@ -49,8 +50,9 @@ const SECURITY_HEADERS = {
     // Svelte writes style="" attributes for each card's place on the sheet, and the print size
     // goes into a <style> of its own; the shared elements use constructable stylesheets.
     "style-src 'self' 'unsafe-inline'",
-    // The card pictures come from TCGSL; uploads and fetched links are blob: URLs on the device.
-    `img-src 'self' data: blob: ${new URL(process.env.POKEPROXY_TCGSL_IMAGES ?? 'https://tcgsl.ewolution.cloud').origin}`,
+    // The card pictures come from TCGSL, the ones in other languages from TCGdex; uploads and
+    // fetched links are blob: URLs on the device.
+    `img-src 'self' data: blob: ${new URL(process.env.POKEPROXY_TCGSL_IMAGES ?? 'https://tcgsl.ewolution.cloud').origin} https://assets.tcgdex.net`,
     "font-src 'self'",
     "connect-src 'self'",
     "manifest-src 'self'",
@@ -68,7 +70,7 @@ const catalog = createCatalog({
   refreshHours: Number(process.env.POKEPROXY_REFRESH) || 24,
 });
 if (process.env.POKEPROXY_REFRESH !== 'off') catalog.start();
-const api = createApi({ catalog });
+const api = createApi({ catalog, localized: createLocalized({ catalog }) });
 const compressed = new Map();
 
 async function resolveFile(pathname) {

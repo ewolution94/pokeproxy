@@ -24,9 +24,22 @@ export interface Card {
   link?: string;
   /** This card's own print style; the sheet's when null. */
   style?: PrintStyle | null;
+  /** The language the proxy stands for, printed on it as a badge (languages.ts). */
+  tag?: string | null;
+  /** A few words printed after the language: "1st Edition", "Shadowless". */
+  note?: string;
+  /** The card's picture in the tagged language, where TCGdex has one (server/localized.mjs). */
+  local?: { lang: string; name: string; image: string } | null;
+  /** Show the catalogue's picture even though a localized one exists. */
+  original?: boolean;
 }
 
+/** The picture a card shows and prints (an uploaded or fetched one comes from files.svelte.ts). */
+export const pictureOf = (c: Card) => (c.local && c.local.lang === c.tag && !c.original ? c.local.image : c.image);
+
 const KEY = 'pokeproxy:sheet';
+/** The note's length: it shares the badge with the language. */
+export const NOTE_MAX = 28;
 const STYLES: PrintStyle[] = ['colour', 'grey', 'light'];
 
 export const uid = () => (crypto.randomUUID?.() ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`);
@@ -61,6 +74,13 @@ function cleanCard(raw: any): Card | null {
     lang: raw.lang === 'ja' ? 'ja' : raw.lang === 'en' ? 'en' : undefined,
     link: typeof raw.link === 'string' ? raw.link : undefined,
     style: STYLES.includes(raw.style) ? raw.style : null,
+    tag: typeof raw.tag === 'string' ? raw.tag.slice(0, 10) : null,
+    note: typeof raw.note === 'string' ? raw.note.slice(0, NOTE_MAX) : '',
+    local:
+      raw.local && typeof raw.local.image === 'string' && /^https:\/\/assets\.tcgdex\.net\//.test(raw.local.image)
+        ? { lang: String(raw.local.lang), name: String(raw.local.name ?? ''), image: raw.local.image }
+        : null,
+    original: !!raw.original,
   };
 }
 
@@ -193,11 +213,32 @@ class Sheet {
   }
 
   setStyle(index: number, style: PrintStyle | null) {
+    this.update(index, { style });
+  }
+
+  /** Changes one card. */
+  update(index: number, patch: Partial<Card>) {
     const card = this.slots[index];
     if (!card) return;
     const next = this.slots.slice();
-    next[index] = { ...card, style };
+    next[index] = { ...card, ...patch };
     this.slots = next;
+  }
+
+  /** Changes the card with this uid wherever it is now (an answer arriving after a move). */
+  updateCard(uid: string, patch: Partial<Card>) {
+    const index = this.slots.findIndex((c) => c?.uid === uid);
+    if (index >= 0) this.update(index, patch);
+  }
+
+  /** The same card again in each language, in the empty slots after it. Returns the new cards. */
+  inLanguages(index: number, tags: string[]): Card[] {
+    const card = this.slots[index];
+    if (!card || !tags.length) return [];
+    const copies = tags.map((tag) => ({ ...card, uid: uid(), tag, local: null, original: false }));
+    this.place(copies, this.firstEmpty(index + 1) ?? this.firstEmpty(0));
+    this.selected = index;
+    return copies;
   }
 
   clear() {
