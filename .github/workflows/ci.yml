@@ -52,6 +52,8 @@ jobs:
           curl -sI http://127.0.0.1:7199/ | grep -qi "cache-control: no-cache"
           curl -sf http://127.0.0.1:7199/manifest.webmanifest | grep -q '"name": "PokeProxy"'
           curl -sf -o /dev/null http://127.0.0.1:7199/sw.js
+          curl -sf -o /dev/null http://127.0.0.1:7199/og.png
+          curl -sf -o /dev/null http://127.0.0.1:7199/icons/apple-touch-icon.png
           asset=$(curl -s http://127.0.0.1:7199/ | grep -o '/assets/[^"]*\.js' | head -1)
           curl -sI "http://127.0.0.1:7199$asset" | grep -qi 'cache-control: public, max-age=31536000, immutable'
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:7199/assets/missing.js)" = 404
