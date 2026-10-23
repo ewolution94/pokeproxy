@@ -6,6 +6,9 @@
 
   A slot takes a click (select it), a card dragged from another slot (swap), and pictures dropped
   from the desktop (placed from that slot on). The arrow keys move between slots, Delete removes.
+  Cards move with the pointer's own drag, not the browser's drag and drop, so the cursor can say
+  what's happening: an open hand over a card, a closed one while it's carried (the browser draws
+  its own cursor during drag and drop, which stays for files only).
 -->
 <script lang="ts">
   import { untrack } from 'svelte';
@@ -49,35 +52,95 @@
 
   const srcOf = (c: Card) => (c.file ? fileUrl(c.file) : c.image);
 
+  // Carrying a card: where it came from, the slot under the pointer, and the picture that follows
+  // the pointer (`carry`, moved by transform once per frame).
   let dragFrom = $state<number | null>(null);
   let dropAt = $state<number | null>(null);
-  const SLOT = 'application/x-pokeproxy-slot';
+  let carry = $state<{ src?: string; filter: string; w: number; h: number; x: number; y: number } | null>(null);
+  let ghost: HTMLElement | undefined = $state();
+  let press: { from: number; id: number; x0: number; y0: number; dx: number; dy: number; el: HTMLElement } | null = null;
+  let frame = 0;
+  let swallowClick = false;
+  /** How far the pointer moves before a press becomes a drag; a click stays a click. */
+  const SLOP = 5;
 
-  function dragStart(e: DragEvent, i: number) {
-    if (!sheet.slots[i]) return;
-    dragFrom = i;
-    e.dataTransfer?.setData(SLOT, String(i));
-    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+  function pointerDown(e: PointerEvent, i: number) {
+    const card = sheet.slots[i];
+    if (!card || e.button !== 0 || e.pointerType === 'touch') return;
+    const el = e.currentTarget as HTMLElement;
+    const box = el.getBoundingClientRect();
+    press = { from: i, id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: e.clientX - box.left, dy: e.clientY - box.top, el };
+    addEventListener('pointermove', pointerMove);
+    addEventListener('pointerup', pointerUp);
+    addEventListener('pointercancel', endDrag);
+    addEventListener('keydown', escape);
   }
 
-  function dragOver(e: DragEvent, i: number) {
-    const types = e.dataTransfer?.types ?? [];
-    if (!types.includes(SLOT) && !types.includes('Files')) return;
+  function pointerMove(e: PointerEvent) {
+    if (!press || e.pointerId !== press.id) return;
+    if (dragFrom == null) {
+      if (Math.hypot(e.clientX - press.x0, e.clientY - press.y0) < SLOP) return;
+      const card = sheet.slots[press.from];
+      if (!card) return endDrag();
+      const box = press.el.getBoundingClientRect();
+      dragFrom = press.from;
+      carry = { src: srcOf(card), filter: filterFor(sheet.styleOf(card)), w: box.width, h: box.height, x: box.left, y: box.top };
+      document.documentElement.classList.add('carrying');
+    }
+    const { clientX: x, clientY: y } = e;
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => {
+      if (ghost && press) ghost.style.transform = `translate3d(${x - press.dx}px, ${y - press.dy}px, 0) rotate(-3deg)`;
+      // The picture follows the pointer with pointer-events off, so this finds the slot beneath it.
+      const under = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-slot]');
+      dropAt = under ? Number(under.dataset.slot) : null;
+    });
+  }
+
+  function pointerUp(e: PointerEvent) {
+    if (!press || e.pointerId !== press.id) return;
+    if (dragFrom != null) {
+      const under = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-slot]');
+      const to = under ? Number(under.dataset.slot) : null;
+      if (to != null && to !== dragFrom) sheet.move(dragFrom, to);
+      // The release over a slot still clicks whatever is under it; that isn't a pick.
+      swallowClick = true;
+      setTimeout(() => (swallowClick = false));
+    }
+    endDrag();
+  }
+
+  function escape(e: KeyboardEvent) {
+    if (e.key === 'Escape' && dragFrom != null) endDrag();
+  }
+
+  function endDrag() {
+    cancelAnimationFrame(frame);
+    press = null;
+    dragFrom = null;
+    dropAt = null;
+    carry = null;
+    document.documentElement.classList.remove('carrying');
+    removeEventListener('pointermove', pointerMove);
+    removeEventListener('pointerup', pointerUp);
+    removeEventListener('pointercancel', endDrag);
+    removeEventListener('keydown', escape);
+  }
+
+  $effect(() => endDrag);
+
+  // Pictures from the desktop still come by the browser's drag and drop.
+  function fileOver(e: DragEvent, i: number) {
+    if (!e.dataTransfer?.types.includes('Files')) return;
     e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = types.includes(SLOT) ? 'move' : 'copy';
+    e.dataTransfer.dropEffect = 'copy';
     dropAt = i;
   }
 
-  function drop(e: DragEvent, i: number) {
+  function fileDrop(e: DragEvent, i: number) {
     e.preventDefault();
     dropAt = null;
-    const from = e.dataTransfer?.getData(SLOT);
-    if (from) {
-      sheet.move(Number(from), i);
-    } else if (e.dataTransfer?.files.length) {
-      ondropfiles?.([...e.dataTransfer.files], i);
-    }
-    dragFrom = null;
+    if (e.dataTransfer?.files.length) ondropfiles?.([...e.dataTransfer.files], i);
   }
 
   function remove(i: number) {
@@ -188,9 +251,9 @@
             style:top="calc({cell.y} * var(--mm))"
             style:width="calc({g.cw} * var(--mm))"
             style:height="calc({g.ch} * var(--mm))"
-            ondragover={(e) => dragOver(e, i)}
+            ondragover={(e) => fileOver(e, i)}
             ondragleave={() => dropAt === i && (dropAt = null)}
-            ondrop={(e) => drop(e, i)}
+            ondrop={(e) => fileDrop(e, i)}
           >
             <button
               type="button"
@@ -199,10 +262,9 @@
               tabindex={sheet.selected === i || (sheet.selected == null && i === 0) ? 0 : -1}
               aria-pressed={sheet.selected === i}
               aria-label={card ? t('slot.card', { name: card.name, n: c + 1 }) : t('slot.empty', { n: c + 1 })}
-              draggable={!!card}
-              ondragstart={(e) => dragStart(e, i)}
-              ondragend={() => ((dragFrom = null), (dropAt = null))}
+              onpointerdown={(e) => pointerDown(e, i)}
               onclick={() => {
+                if (swallowClick) return;
                 sheet.select(i);
                 onpick?.(i);
               }}
@@ -230,6 +292,18 @@
       </div>
     </section>
   {/each}
+  {#if carry}
+    <div
+      class="ghost"
+      bind:this={ghost}
+      style:width="{carry.w}px"
+      style:height="{carry.h}px"
+      style:transform="translate3d({carry.x}px, {carry.y}px, 0) rotate(-3deg)"
+      aria-hidden="true"
+    >
+      {#if carry.src}<img src={carry.src} alt="" style:filter={carry.filter} />{/if}
+    </div>
+  {/if}
   {#if g.perPage}
     <button type="button" class="add-page" onclick={addPage}>
       <Plus size={15} aria-hidden="true" />
@@ -329,6 +403,24 @@
     position: absolute;
   }
 
+  /* The selected slot (and one with keyboard focus) sits above its neighbours, so its outline isn't
+     covered by the card beside it when two cards touch. */
+  .slot.selected,
+  .slot:focus-within,
+  .slot.over {
+    z-index: 2;
+  }
+
+  .slot.filled .hit {
+    cursor: grab;
+  }
+
+  :global(html.carrying),
+  :global(html.carrying *) {
+    cursor: grabbing !important;
+    user-select: none;
+  }
+
   .hit {
     position: absolute;
     inset: 0;
@@ -398,7 +490,31 @@
   }
 
   .slot.dragging {
-    opacity: 0.4;
+    opacity: 0.35;
+  }
+
+  /* A card carried onto another swaps with it. */
+  .slot.filled.over .hit {
+    outline: 2px dashed var(--ewo-project-pokeproxy);
+    outline-offset: 2px;
+  }
+
+  .ghost {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 60;
+    border-radius: 3.5% / 2.5%;
+    overflow: hidden;
+    pointer-events: none;
+    box-shadow: 0 14px 32px -6px rgb(0 0 0 / 0.35);
+    will-change: transform;
+  }
+
+  .ghost img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
   .slot.fresh img {
@@ -490,6 +606,7 @@
     .page.blank,
     .page-head,
     .add-page,
+    .ghost,
     .remove,
     .toobig {
       display: none !important;

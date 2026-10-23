@@ -144,9 +144,11 @@
     gap: 0.75rem;
   }
 
+  /* Sticks flush under the header: a scroll container's padding would otherwise leave a strip above
+     it where the cards show through (--panel-pad is the column's top padding, App.svelte). */
   .query {
     position: sticky;
-    top: 0;
+    top: calc(-1 * var(--panel-pad, 0px));
     z-index: 1;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;

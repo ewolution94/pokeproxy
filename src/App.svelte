@@ -180,7 +180,8 @@
   .setup-col,
   .picker-col {
     --panel-bg: var(--ewo-bg);
-    padding: 1.1rem 1.25rem 2rem;
+    --panel-pad: 1.1rem;
+    padding: var(--panel-pad) 1.25rem 2rem;
     background: var(--ewo-bg);
   }
 

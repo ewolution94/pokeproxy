@@ -81,6 +81,7 @@
       <h3 class="label">{t('setup.gap')}</h3>
       <span class="value ewo-mono">{mm(s.gap)}</span>
     </div>
+    <!-- Folio's shared slider (Randomiser's): the page reflows as it's dragged. -->
     <ewo-slider
       label={t('setup.gap')}
       min={0}
@@ -89,6 +90,9 @@
       mark={0}
       value={s.gap}
       format={(v: number) => mm(v)}
+      ticks
+      ends
+      oninput={(e) => sheet.change({ gap: e.detail.value })}
       onchange={(e) => sheet.change({ gap: e.detail.value })}
     ></ewo-slider>
     <p class="hint">{t('setup.gapHint')}</p>
