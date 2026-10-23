@@ -87,7 +87,6 @@
       min={0}
       max={5}
       step={0.5}
-      mark={0}
       value={s.gap}
       format={(v: number) => mm(v)}
       ticks
