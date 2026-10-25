@@ -196,6 +196,9 @@
   /* One height whatever the tab shows, so the sheet doesn't jump as results come in. */
   .sheet-picker {
     --panel-bg: var(--ewo-bg-raised);
+    /* The sheet's scrolling body has this much padding on top (Folio's sheet.ts, .body), so the
+       search bar sticks flush under the sheet's header, not that far below it. */
+    --panel-pad: var(--ewo-space-2);
     min-height: min(70svh, 640px);
   }
 
