@@ -322,6 +322,7 @@
             class:dragging={dragFrom === i}
             class:over={dropAt === i && dragFrom !== i}
             class:fresh={!!card && fresh.has(card.uid)}
+            class:flash={sheet.flash === i}
             style:left="calc({cell.x} * var(--mm))"
             style:top="calc({cell.y} * var(--mm))"
             style:width="calc({g.cw} * var(--mm))"
@@ -719,6 +720,26 @@
     cursor: grabbing;
   }
 
+  /* A card placed from the phone's card sheet, lit up once the sheet is out of the way. */
+  .slot.flash .hit {
+    animation: placed 1.1s var(--ewo-ease) both;
+  }
+
+  @keyframes placed {
+    0% {
+      box-shadow: 0 0 0 0 color-mix(in oklab, var(--ewo-project-pokeproxy) 70%, transparent);
+      scale: 0.96;
+    }
+    30% {
+      box-shadow: 0 0 0 6px color-mix(in oklab, var(--ewo-project-pokeproxy) 55%, transparent);
+      scale: 1.03;
+    }
+    100% {
+      box-shadow: 0 0 0 12px transparent;
+      scale: 1;
+    }
+  }
+
   .slot.dragging {
     opacity: 0.35;
   }
@@ -811,6 +832,12 @@
   @media (prefers-reduced-motion: reduce) {
     .slot.fresh img {
       animation: none;
+    }
+
+    /* Still marked, without the movement. */
+    .slot.flash .hit {
+      animation: none;
+      box-shadow: 0 0 0 3px var(--ewo-project-pokeproxy);
     }
   }
 

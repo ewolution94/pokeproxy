@@ -12,6 +12,7 @@
   import Pages from './components/Pages.svelte';
   import Picker from './components/Picker.svelte';
   import Settings from './components/Settings.svelte';
+  import { untrack } from 'svelte';
   import { placeFilesWithNote, placeLink, tidyFiles } from './lib/actions.svelte.ts';
   import { isPicture } from './lib/files.svelte.ts';
   import { prefs, ui } from './lib/prefs.svelte.ts';
@@ -91,6 +92,30 @@
   // The sheets' content stays until their exit animation is done (Folio's ewo-sheet `close`).
   let setupShown = $state(false);
   let pickerShown = $state(false);
+
+  // On a phone the cards come in a sheet over the page: placing one closes it, so the card can be
+  // seen landing. Once the sheet has slid away, the page scrolls to the card and lights it up.
+  let reveal: number | null = null;
+  $effect(() => {
+    const placed = sheet.placed;
+    if (!placed) return;
+    untrack(() => {
+      if (mid || !ui.picker) return;
+      reveal = placed.at;
+      ui.picker = false;
+    });
+  });
+
+  let flashTimer: ReturnType<typeof setTimeout> | undefined;
+  function revealPlaced() {
+    const at = reveal;
+    reveal = null;
+    if (at == null) return;
+    document.querySelector(`[data-slot="${at}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    clearTimeout(flashTimer);
+    sheet.flash = at;
+    flashTimer = setTimeout(() => (sheet.flash = null), 1200);
+  }
   $effect(() => {
     if (ui.setup) setupShown = true;
   });
@@ -133,7 +158,7 @@
 {/if}
 
 {#if !mid}
-  <ewo-sheet open={ui.picker} label={t('picker.title')} oncancel={() => (ui.picker = false)} onclose={() => ((pickerShown = false), (ui.picker = false))}>
+  <ewo-sheet open={ui.picker} label={t('picker.title')} oncancel={() => (ui.picker = false)} onclose={() => ((pickerShown = false), (ui.picker = false), revealPlaced())}>
     <span slot="heading">{t('picker.title')}</span>
     {#if pickerShown}
       <div class="sheet-picker"><Picker bind:search /></div>

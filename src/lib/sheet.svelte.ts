@@ -104,6 +104,10 @@ class Sheet {
   selected = $state<number | null>(0);
   /** The last change that removed something, for Undo. */
   #undo: (Card | null)[] | null = null;
+  /** The last placing: the slot its first card went into, and a counter that tells two apart. */
+  placed = $state<{ at: number; n: number } | null>(null);
+  /** A slot to light up for a moment (a card just placed from the phone's card sheet). */
+  flash = $state<number | null>(null);
 
   geometry = $derived(layout(this.setup));
   pageCount = $derived(this.geometry.perPage ? Math.ceil(this.slots.length / this.geometry.perPage) : 0);
@@ -182,6 +186,7 @@ class Sheet {
       i++;
     }
     this.slots = next;
+    this.placed = { at: put[0], n: (this.placed?.n ?? 0) + 1 };
     let after = this.firstEmpty(put[put.length - 1] + 1);
     if (after == null) {
       after = this.firstEmpty(0);
