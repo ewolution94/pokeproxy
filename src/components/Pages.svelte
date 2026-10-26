@@ -55,47 +55,112 @@
   const srcOf = (c: Card) => (c.file ? fileUrl(c.file) : pictureOf(c));
 
   // Carrying a card: where it came from, the slot under the pointer, and the picture that follows
-  // the pointer (`carry`, moved by transform once per frame).
+  // the pointer (`carry`, moved by transform once per frame). A mouse or pen picks a card up by
+  // moving a few pixels; a finger by holding it still for a moment (a quick swipe scrolls the page,
+  // a quick tap selects). Near the top or bottom edge the sheet scrolls along.
   let dragFrom = $state<number | null>(null);
   let dropAt = $state<number | null>(null);
   let carry = $state<{ src?: string; filter: string; w: number; h: number; x: number; y: number } | null>(null);
   let ghost: HTMLElement | undefined = $state();
-  let press: { from: number; id: number; x0: number; y0: number; dx: number; dy: number; el: HTMLElement } | null = null;
+  let press: {
+    from: number;
+    id: number;
+    touch: boolean;
+    x0: number;
+    y0: number;
+    dx: number;
+    dy: number;
+    x: number;
+    y: number;
+    el: HTMLElement;
+  } | null = null;
   let frame = 0;
+  let hold: ReturnType<typeof setTimeout> | undefined;
   let swallowClick = false;
-  /** How far the pointer moves before a press becomes a drag; a click stays a click. */
+  /** How far a mouse moves before a press becomes a drag; a click stays a click. */
   const SLOP = 5;
+  /** How long a finger holds a card still to pick it up, and how far it may wander meanwhile. */
+  const HOLD = 320;
+  const HOLD_SLOP = 10;
+  /** How close to the scroller's edge the pointer has to be to scroll it, and the fastest step. */
+  const EDGE = 64;
+  const SPEED = 18;
 
   function pointerDown(e: PointerEvent, i: number) {
     const card = sheet.slots[i];
-    if (!card || e.button !== 0 || e.pointerType === 'touch') return;
+    if (!card || e.button !== 0) return;
     const el = e.currentTarget as HTMLElement;
     const box = el.getBoundingClientRect();
-    press = { from: i, id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: e.clientX - box.left, dy: e.clientY - box.top, el };
+    const touch = e.pointerType === 'touch';
+    press = { from: i, id: e.pointerId, touch, x0: e.clientX, y0: e.clientY, dx: e.clientX - box.left, dy: e.clientY - box.top, x: e.clientX, y: e.clientY, el };
     addEventListener('pointermove', pointerMove);
     addEventListener('pointerup', pointerUp);
     addEventListener('pointercancel', endDrag);
     addEventListener('keydown', escape);
+    if (touch) {
+      // Registered now, so once the card is up the finger's moves can be kept from scrolling.
+      addEventListener('touchmove', holdPage, { passive: false });
+      clearTimeout(hold);
+      hold = setTimeout(pickUp, HOLD);
+    }
+  }
+
+  /** While a card is carried by a finger, the page doesn't scroll under it. */
+  function holdPage(e: TouchEvent) {
+    if (dragFrom != null && e.cancelable) e.preventDefault();
+  }
+
+  function pickUp() {
+    if (!press) return;
+    const card = sheet.slots[press.from];
+    if (!card) return endDrag();
+    const box = press.el.getBoundingClientRect();
+    dragFrom = press.from;
+    carry = { src: srcOf(card), filter: filterFor(sheet.styleOf(card)), w: box.width, h: box.height, x: box.left, y: box.top };
+    document.documentElement.classList.add('carrying');
+    if (press.touch) navigator.vibrate?.(12);
+    follow();
   }
 
   function pointerMove(e: PointerEvent) {
     if (!press || e.pointerId !== press.id) return;
+    press.x = e.clientX;
+    press.y = e.clientY;
     if (dragFrom == null) {
-      if (Math.hypot(e.clientX - press.x0, e.clientY - press.y0) < SLOP) return;
-      const card = sheet.slots[press.from];
-      if (!card) return endDrag();
-      const box = press.el.getBoundingClientRect();
-      dragFrom = press.from;
-      carry = { src: srcOf(card), filter: filterFor(sheet.styleOf(card)), w: box.width, h: box.height, x: box.left, y: box.top };
-      document.documentElement.classList.add('carrying');
+      const moved = Math.hypot(e.clientX - press.x0, e.clientY - press.y0);
+      // A finger that moves before the card is up is scrolling: let it.
+      if (press.touch) {
+        if (moved > HOLD_SLOP) endDrag();
+        return;
+      }
+      if (moved < SLOP) return;
+      pickUp();
     }
-    const { clientX: x, clientY: y } = e;
+  }
+
+  /** The scroller the pages sit in: their column on wider screens, the page itself on a phone. */
+  function scroller(): Element {
+    const col = document.querySelector('.pages-col');
+    return col && getComputedStyle(col).overflowY === 'auto' ? col : (document.scrollingElement ?? document.documentElement);
+  }
+
+  /** Every frame while a card is carried: the picture follows, the slot beneath is marked, and the
+   *  sheet scrolls when the pointer is near an edge. */
+  function follow() {
     cancelAnimationFrame(frame);
-    frame = requestAnimationFrame(() => {
-      if (ghost && press) ghost.style.transform = `translate3d(${x - press.dx}px, ${y - press.dy}px, 0) rotate(-3deg)`;
+    frame = requestAnimationFrame(function step() {
+      if (!press || dragFrom == null) return;
+      const { x, y } = press;
+      if (ghost) ghost.style.transform = `translate3d(${x - press.dx}px, ${y - press.dy}px, 0) rotate(-3deg) scale(${press.touch ? 1.06 : 1})`;
+      const box = scroller();
+      const rect = box === document.scrollingElement || box === document.documentElement ? { top: 0, bottom: innerHeight } : box.getBoundingClientRect();
+      const top = Math.max(rect.top, document.querySelector('.bar')?.getBoundingClientRect().bottom ?? 0);
+      const near = y < top + EDGE ? -(1 - (y - top) / EDGE) : y > rect.bottom - EDGE ? 1 - (rect.bottom - y) / EDGE : 0;
+      if (near) box.scrollTop += Math.round(Math.max(-1, Math.min(1, near)) * SPEED);
       // The picture follows the pointer with pointer-events off, so this finds the slot beneath it.
       const under = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-slot]');
       dropAt = under ? Number(under.dataset.slot) : null;
+      frame = requestAnimationFrame(step);
     });
   }
 
@@ -105,6 +170,8 @@
       const under = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-slot]');
       const to = under ? Number(under.dataset.slot) : null;
       if (to != null && to !== dragFrom) sheet.move(dragFrom, to);
+      // A card picked up and put back where it was is simply selected.
+      else sheet.select(dragFrom);
       // The release over a slot still clicks whatever is under it; that isn't a pick.
       swallowClick = true;
       setTimeout(() => (swallowClick = false));
@@ -118,6 +185,7 @@
 
   function endDrag() {
     cancelAnimationFrame(frame);
+    clearTimeout(hold);
     press = null;
     dragFrom = null;
     dropAt = null;
@@ -127,6 +195,7 @@
     removeEventListener('pointerup', pointerUp);
     removeEventListener('pointercancel', endDrag);
     removeEventListener('keydown', escape);
+    removeEventListener('touchmove', holdPage);
   }
 
   $effect(() => endDrag);
@@ -339,6 +408,7 @@
               aria-pressed={sheet.selected === i}
               aria-label={card ? t('slot.card', { name: card.name, n: c + 1 }) : t('slot.empty', { n: c + 1 })}
               onpointerdown={(e) => pointerDown(e, i)}
+              oncontextmenu={(e) => card && e.preventDefault()}
               onclick={() => {
                 if (swallowClick) return;
                 sheet.select(i);
@@ -526,6 +596,10 @@
 
   .slot.filled .hit {
     cursor: grab;
+    /* A finger holds a card to pick it up: no image menu, no text selection, no magnifier. */
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   :global(html.carrying),

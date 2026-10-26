@@ -66,6 +66,8 @@
 
   const label = $derived(card ? sheet.labelOf(card) : DEFAULT_LABEL);
   const PLACES = { top: 0.18, middle: 0.5, bottom: 0.82 } as const;
+  /** A finger moves a card by holding it (Pages.svelte); say so where a mouse would just drag. */
+  const touch = matchMedia('(hover: none) and (pointer: coarse)').matches;
 
   function remove() {
     if (at == null) return;
@@ -234,7 +236,7 @@
           }}>{more.length ? tn('card.moreGo', more.length) : t('card.morePick')}</button
         >
       </details>
-      <p class="replace">{t('card.replace')}</p>
+      <p class="replace">{t('card.replace')}{#if touch}{' '}{t('card.moveTouch')}{/if}</p>
     {/if}
   </div>
 

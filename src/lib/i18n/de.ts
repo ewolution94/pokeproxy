@@ -128,6 +128,7 @@ export const de: Record<MessageKey, string> = {
   'card.remove': 'Entfernen',
   'card.duplicate': 'Noch einmal',
   'card.replace': 'Eine Karte von unten ersetzt sie.',
+  'card.moveTouch': 'Zum Verschieben eine Karte auf dem Bogen halten, bis sie sich hebt, dann ziehen.',
   'card.source': 'Link öffnen',
 
   'toast.removed': 'Karte entfernt',

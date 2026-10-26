@@ -126,6 +126,7 @@ export const en = {
   'card.remove': 'Remove',
   'card.duplicate': 'Once more',
   'card.replace': 'A card from below replaces it.',
+  'card.moveTouch': 'To move a card, hold it on the sheet until it lifts, then drag it.',
   'card.source': 'Open the link',
 
   'toast.removed': 'Card removed',
