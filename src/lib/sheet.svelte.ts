@@ -283,7 +283,12 @@ class Sheet {
     const card = this.slots[index];
     if (!card) return;
     if (card.label) this.update(index, { label: cleanLabel({ ...card.label, ...patch }) });
-    else this.setup = { ...this.setup, label: cleanLabel({ ...this.setup.label, ...patch }) };
+    else this.setSheetLabel(patch);
+  }
+
+  /** Changes the sheet's label look, which every card without its own follows. */
+  setSheetLabel(patch: Partial<Label>) {
+    this.setup = { ...this.setup, label: cleanLabel({ ...this.setup.label, ...patch }) };
   }
 
   /** Gives a card a look of its own (a copy of what it shows now), or returns it to the sheet's. */

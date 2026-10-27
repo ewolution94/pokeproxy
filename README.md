@@ -97,6 +97,7 @@ server/localized.mjs  a card's picture in another language, from TCGdex
 server/species.json   every Pokémon's name in nine languages (scripts/species.mjs)
 src/lib/layout.ts     paper, card size, grid, cut marks, scale check (millimetres)
 src/lib/sheet.svelte.ts  the setup and the slots, kept on the device
-src/components/       Header, Setup, Pages (the paper), Picker (Search, Link, Upload), Settings
+src/components/       Header, Setup (with the labels every card follows), Pages (the paper),
+                      Picker (the selected card; Search, Link, Upload), LabelControls, Settings
 tests/                node --test
 ```

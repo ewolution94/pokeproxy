@@ -1,16 +1,21 @@
 <!--
   The sheet's setup, top to bottom in the order you'd decide it: the paper, the card's size, the
-  space between cards, the cut marks and the scale check, the print style. The readout under the
-  card size says what fits ("3 × 3: 9 cards a page"). A column on wide screens, a sheet otherwise.
+  space between cards, the cut marks and the scale check, the print style, and the labels every
+  card follows. The readout under the card size says what fits ("3 × 3: 9 cards a page"). The hints
+  sit behind an (i) each, so the column fits a laptop's window. A column on wide screens, a sheet
+  otherwise.
 -->
 <script lang="ts">
-  import { PAPERS, type PaperId, type PrintStyle } from '../lib/layout.ts';
+  import Info from './Info.svelte';
+  import LabelControls from './LabelControls.svelte';
+  import { DEFAULT_LABEL, PAPERS, type PaperId, type PrintStyle } from '../lib/layout.ts';
   import { sheet } from '../lib/sheet.svelte.ts';
   import { mm, t, tn } from '../lib/i18n/index.svelte.ts';
   import { toast } from '../../vendor/ewo/elements/toaster.js';
 
   const g = $derived(sheet.geometry);
   const s = $derived(sheet.setup);
+  const tips = $state({ card: false, gap: false, style: false, labels: false });
 
   function size(which: 'w' | 'h', value: string) {
     const n = Number(value.replace(',', '.'));
@@ -47,7 +52,10 @@
   </section>
 
   <section>
-    <h3 class="label">{t('setup.card')}</h3>
+    <div class="head">
+      <h3 class="label">{t('setup.card')}</h3>
+      {#if !s.custom}<Info text={t('setup.standardHint')} about={t('setup.about', { what: t('setup.card') })} bind:open={tips.card} />{/if}
+    </div>
     <ewo-segmented size="sm" stretch label={t('setup.card')} value={s.custom ? 'custom' : 'standard'} onchange={(e) => sheet.change({ custom: e.detail.value === 'custom' })}>
       <option value="standard">{t('setup.standard')}</option>
       <option value="custom">{t('setup.custom')}</option>
@@ -66,7 +74,7 @@
           <span class="unit">mm</span>
         </label>
       </div>
-    {:else}
+    {:else if tips.card}
       <p class="hint">{t('setup.standardHint')}</p>
     {/if}
     {#if g.perPage}
@@ -79,8 +87,10 @@
   <section>
     <div class="head">
       <h3 class="label">{t('setup.gap')}</h3>
+      <Info text={t('setup.gapHint')} about={t('setup.about', { what: t('setup.gap') })} bind:open={tips.gap} />
       <span class="value ewo-mono">{mm(s.gap)}</span>
     </div>
+    {#if tips.gap}<p class="hint">{t('setup.gapHint')}</p>{/if}
     <!-- Folio's shared slider (Randomiser's): the page reflows as it's dragged. -->
     <ewo-slider
       label={t('setup.gap')}
@@ -90,29 +100,40 @@
       value={s.gap}
       format={(v: number) => mm(v)}
       ticks
-      ends
       oninput={(e) => sheet.change({ gap: e.detail.value })}
       onchange={(e) => sheet.change({ gap: e.detail.value })}
     ></ewo-slider>
-    <p class="hint">{t('setup.gapHint')}</p>
   </section>
 
   <section class="switches">
     <ewo-switch row checked={s.marks} onchange={(e) => sheet.change({ marks: e.detail.checked })}>{t('setup.marks')}</ewo-switch>
-    <ewo-switch row checked={s.ruler} onchange={(e) => sheet.change({ ruler: e.detail.checked })}>
+    <ewo-switch row checked={s.ruler} title={t('setup.rulerHint')} onchange={(e) => sheet.change({ ruler: e.detail.checked })}>
       {t('setup.ruler')}
-      <span slot="hint">{t('setup.rulerHint')}</span>
+      <span slot="hint">{t('setup.rulerShort')}</span>
     </ewo-switch>
   </section>
 
   <section>
-    <h3 class="label">{t('setup.style')}</h3>
+    <div class="head">
+      <h3 class="label">{t('setup.style')}</h3>
+      <Info text={t('setup.printTip')} about={t('setup.about', { what: t('setup.style') })} bind:open={tips.style} />
+    </div>
+    {#if tips.style}<p class="hint">{t('setup.printTip')}</p>{/if}
     <ewo-segmented size="sm" stretch label={t('setup.style')} value={s.style} onchange={(e) => sheet.change({ style: e.detail.value as PrintStyle })}>
       <option value="colour">{t('style.colour')}</option>
       <option value="grey">{t('style.grey')}</option>
       <option value="light">{t('style.light')}</option>
     </ewo-segmented>
-    <p class="hint">{t('setup.printTip')}</p>
+  </section>
+
+  <section aria-labelledby="labels-title">
+    <div class="head">
+      <h3 class="label" id="labels-title">{t('setup.labels')}</h3>
+      <Info text={`${t('setup.labelsHint')} ${t('label.hint')}`} about={t('setup.about', { what: t('setup.labels') })} bind:open={tips.labels} />
+      <button type="button" class="link" onclick={() => sheet.setSheetLabel(DEFAULT_LABEL)}>{t('label.reset')}</button>
+    </div>
+    {#if tips.labels}<p class="hint">{t('setup.labelsHint')} {t('label.hint')}</p>{/if}
+    <LabelControls label={s.label} onchange={(patch) => sheet.setSheetLabel(patch)} />
   </section>
 
   <section class="end">
@@ -196,12 +217,36 @@
 
   .head {
     display: flex;
-    align-items: baseline;
-    justify-content: space-between;
+    align-items: center;
+    gap: 0.3rem;
+    min-height: 1.1rem;
+  }
+
+  .head .label {
+    margin: 0;
+  }
+
+  .value,
+  .link {
+    margin-left: auto;
   }
 
   .value {
     font-size: var(--ewo-text-xs);
+    color: var(--ewo-fg);
+  }
+
+  .link {
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: var(--ewo-text-xs);
+    color: var(--ewo-fg-3);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .link:hover {
     color: var(--ewo-fg);
   }
 
@@ -228,6 +273,7 @@
 
   .end {
     display: flex;
+    padding-bottom: 0;
   }
 
   .quiet {

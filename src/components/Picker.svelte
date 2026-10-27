@@ -1,13 +1,18 @@
 <!--
-  Where cards come from: the selected slot on top (and, when it holds a card, what it is, the
-  language printed on it with a note, its picture in that language where there is one, how it
-  prints, the same card in other languages, Once more and Remove), then Search, Link and Upload. A
-  column on screens from 760 px, a sheet on a phone.
+  Where cards come from: the selected slot on top and, when it holds a card, what belongs to that
+  card (what it is, Once more and Remove, the language printed on it with a note, its picture in that
+  language where there is one), with two rows that open in place: its own label or print style, and
+  the same card in other languages. Then Search, Link and Upload. The labels every card follows are
+  the sheet's (Setup). A column on screens from 760 px, a sheet on a phone.
 -->
 <script lang="ts">
   import Copy from '@lucide/svelte/icons/copy-plus';
   import Trash from '@lucide/svelte/icons/trash-2';
   import External from '@lucide/svelte/icons/external-link';
+  import Tag from '@lucide/svelte/icons/tag';
+  import Languages from '@lucide/svelte/icons/languages';
+  import Chevron from '@lucide/svelte/icons/chevron-right';
+  import LabelControls from './LabelControls.svelte';
   import SearchTab from './SearchTab.svelte';
   import LinkTab from './LinkTab.svelte';
   import UploadTab from './UploadTab.svelte';
@@ -15,7 +20,7 @@
   import { filterFor, type PrintStyle } from '../lib/layout.ts';
   import { prefs, type Tab } from '../lib/prefs.svelte.ts';
   import { NOTE_MAX, sheet } from '../lib/sheet.svelte.ts';
-  import { DEFAULT_LABEL, LABEL_ANGLE, LABEL_SIZE, type LabelLook } from '../lib/layout.ts';
+  import { DEFAULT_LABEL } from '../lib/layout.ts';
   import { LANGUAGES, language } from '../lib/languages.ts';
   import { inLanguages, setTag } from '../lib/local.ts';
   import { retry } from '../lib/retry.ts';
@@ -64,8 +69,12 @@
     return () => c.abort();
   });
 
-  const label = $derived(card ? sheet.labelOf(card) : DEFAULT_LABEL);
-  const PLACES = { top: 0.18, middle: 0.5, bottom: 0.82 } as const;
+  // The two rows stay open or closed from card to card.
+  const rows = $state({ own: false, more: false });
+  /** What the Own row says while closed: "Like the sheet", or what this card has of its own. */
+  const ownValue = $derived(
+    card ? [card.label ? t('card.ownLabel') : '', card.style ? t(`style.${card.style}` as 'style.grey') : ''].filter(Boolean).join(' · ') || t('card.likeSheet') : '',
+  );
   /** A finger moves a card by holding it (Pages.svelte); say so where a mouse would just drag. */
   const touch = matchMedia('(hover: none) and (pointer: coarse)').matches;
 
@@ -103,9 +112,9 @@
           {#if dpi && dpi < 200}<p class="lowres">{t('card.lowRes', { px: natural, dpi })}</p>{/if}
           <div class="actions">
             <button type="button" class="act" onclick={() => sheet.duplicate(at)}><Copy size={14} aria-hidden="true" />{t('card.duplicate')}</button>
-            <button type="button" class="act danger" onclick={remove}><Trash size={14} aria-hidden="true" />{t('card.remove')}</button>
+            <button type="button" class="act icon danger" title={t('card.remove')} aria-label={t('card.remove')} onclick={remove}><Trash size={14} aria-hidden="true" /></button>
             {#if card.link}
-              <a class="act" href={card.link} target="_blank" rel="noopener noreferrer" title={t('card.source')} aria-label={t('card.source')}><External size={14} aria-hidden="true" /></a>
+              <a class="act icon" href={card.link} target="_blank" rel="noopener noreferrer" title={t('card.source')} aria-label={t('card.source')}><External size={14} aria-hidden="true" /></a>
             {/if}
           </div>
         </div>
@@ -145,98 +154,81 @@
       {:else if noLocal && lang}
         <p class="hint">{t('card.noLocal', { lang: lang.name })}</p>
       {/if}
-      {#if card.tag || card.note}
-        <section class="labelbox" aria-label={t('label.title')}>
-          <div class="row">
-            <span class="label">{t('label.title')}</span>
-            <button type="button" class="link" onclick={() => sheet.setLabel(at, DEFAULT_LABEL)}>{t('label.reset')}</button>
-          </div>
-          <ewo-segmented size="sm" stretch label={t('label.look')} value={label.look} onchange={(e) => sheet.setLabel(at, { look: e.detail.value as LabelLook })}>
-            <option value="dark">{t('look.dark')}</option>
-            <option value="light">{t('look.light')}</option>
-            <option value="band">{t('look.band')}</option>
-            <option value="stamp">{t('look.stamp')}</option>
-          </ewo-segmented>
-          <div class="two">
-            <div class="ctl">
-              <div class="row"><span class="sub">{t('label.size')}</span><span class="val ewo-mono">{mm(label.size)}</span></div>
-              <ewo-slider
-                label={t('label.size')}
-                min={LABEL_SIZE.min}
-                max={LABEL_SIZE.max}
-                step={0.5}
-                value={label.size}
-                format={(v: number) => mm(v)}
-                oninput={(e) => sheet.setLabel(at, { size: e.detail.value })}
-                onchange={(e) => sheet.setLabel(at, { size: e.detail.value })}
-              ></ewo-slider>
-            </div>
-            <div class="ctl">
-              <div class="row"><span class="sub">{t('label.angle')}</span><span class="val ewo-mono">{label.angle}°</span></div>
-              <ewo-slider
-                label={t('label.angle')}
-                min={-LABEL_ANGLE}
-                max={LABEL_ANGLE}
-                step={1}
-                value={label.angle}
-                format={(v: number) => `${v}°`}
-                oninput={(e) => sheet.setLabel(at, { angle: e.detail.value })}
-                onchange={(e) => sheet.setLabel(at, { angle: e.detail.value })}
-              ></ewo-slider>
-            </div>
-          </div>
-          <div class="places" role="group" aria-label={t('label.place')}>
-            <span class="sub">{t('label.place')}</span>
-            {#each Object.entries(PLACES) as [name, y] (name)}
-              <button type="button" class="chip" class:on={Math.abs(label.y - y) < 0.02 && Math.abs(label.x - 0.5) < 0.02} onclick={() => sheet.setLabel(at, { x: 0.5, y })}>{t(`place.${name}` as 'place.top')}</button>
-            {/each}
-          </div>
-          <p class="hint">{t('label.hint')}</p>
-          <ewo-switch row checked={!!card.label} onchange={(e) => sheet.ownLabel(at, e.detail.checked)}>
-            {t('label.own')}
-            <span slot="hint">{t('label.ownHint')}</span>
-          </ewo-switch>
-        </section>
-      {/if}
-      <div class="style">
-        <span class="label">{t('card.style')}</span>
-        <ewo-segmented
-          size="sm"
-          stretch
-          label={t('card.style')}
-          value={card.style ?? 'sheet'}
-          onchange={(e) => sheet.setStyle(at, e.detail.value === 'sheet' ? null : (e.detail.value as PrintStyle))}
-        >
-          <option value="sheet">{t('style.sheet')}</option>
-          <option value="colour">{t('style.colour')}</option>
-          <option value="grey">{t('style.grey')}</option>
-          <option value="light">{t('style.light')}</option>
-        </ewo-segmented>
-      </div>
-      <details class="more">
-        <summary>{t('card.more')}</summary>
-        <p class="hint">{t('card.moreHint')}</p>
-        {#if pictures.size}<p class="hint">{t('card.pictures')}</p>{/if}
-        <div class="chips">
-          {#each LANGUAGES as l (l.code)}
-            {#if l.code !== card.tag}
-              <button type="button" class="chip" class:on={more.includes(l.code)} aria-pressed={more.includes(l.code)} onclick={() => toggle(l.code)}>
-                <b>{l.short}</b> {l.name}{#if pictures.has(l.code)}<i class="pic-dot" aria-hidden="true">●</i>{/if}
-              </button>
+      <div class="rows">
+        <details bind:open={rows.own}>
+          <summary>
+            <Tag size={16} aria-hidden="true" />
+            <span class="title">{t('card.own')}</span>
+            <span class="value">{ownValue}</span>
+            <span class="chev" aria-hidden="true"><Chevron size={16} /></span>
+          </summary>
+          <div class="inner">
+            {#if card.tag || card.note}
+              <ewo-switch row checked={!!card.label} onchange={(e) => sheet.ownLabel(at, e.detail.checked)}>
+                {t('label.own')}
+                <span slot="hint">{t('label.ownHint')}</span>
+              </ewo-switch>
+              {#if card.label}
+                <div class="own">
+                  <div class="row">
+                    <span class="label">{t('card.ownLabel')}</span>
+                    <button type="button" class="link" onclick={() => sheet.setLabel(at, DEFAULT_LABEL)}>{t('label.reset')}</button>
+                  </div>
+                  <LabelControls label={card.label} onchange={(patch) => sheet.setLabel(at, patch)} />
+                </div>
+              {/if}
+            {:else}
+              <p class="hint">{t('card.ownNone')}</p>
             {/if}
-          {/each}
-        </div>
-        <button
-          type="button"
-          class="add"
-          disabled={!more.length}
-          onclick={() => {
-            inLanguages(at, more);
-            more = [];
-          }}>{more.length ? tn('card.moreGo', more.length) : t('card.morePick')}</button
-        >
-      </details>
-      <p class="replace">{t('card.replace')}{#if touch}{' '}{t('card.moveTouch')}{/if}</p>
+            <div class="style">
+              <span class="label">{t('card.style')}</span>
+              <ewo-segmented
+                size="sm"
+                stretch
+                label={t('card.style')}
+                value={card.style ?? 'sheet'}
+                onchange={(e) => sheet.setStyle(at, e.detail.value === 'sheet' ? null : (e.detail.value as PrintStyle))}
+              >
+                <option value="sheet">{t('style.sheet')}</option>
+                <option value="colour">{t('style.colour')}</option>
+                <option value="grey">{t('style.grey')}</option>
+                <option value="light">{t('style.light')}</option>
+              </ewo-segmented>
+            </div>
+          </div>
+        </details>
+        <details bind:open={rows.more}>
+          <summary>
+            <Languages size={16} aria-hidden="true" />
+            <span class="title">{t('card.more')}</span>
+            {#if pictures.size}<span class="value">{tn('card.withPicture', pictures.size)}</span>{/if}
+            <span class="chev" aria-hidden="true"><Chevron size={16} /></span>
+          </summary>
+          <div class="inner">
+            <p class="hint">{t('card.moreHint')}</p>
+            {#if pictures.size}<p class="hint">{t('card.pictures')}</p>{/if}
+            <div class="chips">
+              {#each LANGUAGES as l (l.code)}
+                {#if l.code !== card.tag}
+                  <button type="button" class="chip" class:on={more.includes(l.code)} aria-pressed={more.includes(l.code)} onclick={() => toggle(l.code)}>
+                    <b>{l.short}</b> {l.name}{#if pictures.has(l.code)}<i class="pic-dot" aria-hidden="true">●</i>{/if}
+                  </button>
+                {/if}
+              {/each}
+            </div>
+            <button
+              type="button"
+              class="add"
+              disabled={!more.length}
+              onclick={() => {
+                inLanguages(at, more);
+                more = [];
+              }}>{more.length ? tn('card.moreGo', more.length) : t('card.morePick')}</button
+            >
+          </div>
+        </details>
+      </div>
+      {#if touch}<p class="replace">{t('card.moveTouch')}</p>{/if}
     {/if}
   </div>
 
@@ -344,6 +336,12 @@
     border-color: var(--ewo-line-strong);
   }
 
+  .act.icon {
+    width: 1.9rem;
+    padding: 0;
+    justify-content: center;
+  }
+
   .act.danger:hover {
     color: var(--ewo-bad);
   }
@@ -353,54 +351,6 @@
     gap: 0.4rem;
   }
 
-
-  .labelbox {
-    display: grid;
-    gap: 0.6rem;
-    padding: 0.75rem;
-    border: 1px solid var(--ewo-line);
-    border-radius: var(--ewo-r-sm);
-  }
-
-  .labelbox .row,
-  .ctl .row {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-  }
-
-  .two {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 0.9rem;
-  }
-
-  .ctl {
-    display: grid;
-    gap: 0.2rem;
-    min-width: 0;
-  }
-
-  .sub {
-    font-size: var(--ewo-text-xs);
-    color: var(--ewo-fg-2);
-  }
-
-  .val {
-    font-size: var(--ewo-text-xs);
-    color: var(--ewo-fg);
-  }
-
-  .places {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.35rem;
-  }
-
-  .places .sub {
-    margin-right: 0.25rem;
-  }
 
   .link {
     padding: 0;
@@ -414,6 +364,12 @@
 
   .link:hover {
     color: var(--ewo-fg);
+  }
+
+  .row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
   }
 
   .pic-dot {
@@ -460,28 +416,85 @@
     color: var(--ewo-warn);
   }
 
-  .more {
+  /* Own label or print style, and In other languages: rows that open in place. */
+  .rows {
     display: grid;
-    gap: 0.55rem;
+    border-block: 1px solid var(--ewo-line-2);
   }
 
-  .more summary {
+  .rows details + details {
+    border-top: 1px solid var(--ewo-line-2);
+  }
+
+  .rows summary {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-height: 2.75rem;
+    list-style: none;
     cursor: pointer;
     font-size: var(--ewo-text-sm);
-    font-weight: 500;
-    color: var(--ewo-fg-2);
-  }
-
-  .more summary:hover {
     color: var(--ewo-fg);
   }
 
-  .more[open] {
-    padding-bottom: 0.25rem;
+  .rows summary::-webkit-details-marker {
+    display: none;
   }
 
-  .more > .hint {
-    margin-top: 0.4rem;
+  .rows summary > :global(svg) {
+    flex: none;
+    color: var(--ewo-fg-3);
+  }
+
+  .rows summary:focus-visible {
+    outline: 2px solid var(--ewo-project-pokeproxy);
+    outline-offset: 2px;
+    border-radius: var(--ewo-r-xs);
+  }
+
+  .title {
+    min-width: 0;
+  }
+
+  .rows .value {
+    margin-left: auto;
+    font-size: var(--ewo-text-xs);
+    color: var(--ewo-fg-3);
+    white-space: nowrap;
+  }
+
+  .chev {
+    display: grid;
+    flex: none;
+    color: var(--ewo-fg-3);
+    transition: transform 0.15s ease;
+  }
+
+  .title + .chev {
+    margin-left: auto;
+  }
+
+  details[open] .chev {
+    transform: rotate(90deg);
+  }
+
+  .rows summary:hover .chev,
+  .rows summary:hover .value {
+    color: var(--ewo-fg-2);
+  }
+
+  .inner {
+    display: grid;
+    gap: 0.7rem;
+    padding: 0.1rem 0 1rem;
+  }
+
+  .own {
+    display: grid;
+    gap: 0.6rem;
+    padding: 0.75rem;
+    border: 1px solid var(--ewo-line);
+    border-radius: var(--ewo-r-sm);
   }
 
   .chips {
