@@ -14,6 +14,21 @@ export interface SheetLink {
   left: number;
 }
 
+/**
+ * This page over https. Opened over plain http (an old address in the browser's history), the page is
+ * another origin with its own saved sheet, so this sheet goes along in the link, unless the address
+ * already carries one. Uploads can't go along (forLink).
+ */
+export async function httpsAddress(): Promise<string> {
+  const base = `https://${location.host}${location.pathname}`;
+  if (location.hash.startsWith(HASH) || !sheet.cardCount) return base + location.search + location.hash;
+  try {
+    return `${base}${HASH}${await encodeLink(forLink({ setup: sheet.setup, slots: sheet.slots }).payload)}`;
+  } catch {
+    return base;
+  }
+}
+
 /** The sheet as a link to this page. */
 export async function sheetLink(): Promise<SheetLink> {
   const { payload, left } = forLink({ setup: sheet.setup, slots: sheet.slots });

@@ -41,6 +41,9 @@ const COMPRESSIBLE = new Set(['.html', '.js', '.mjs', '.css', '.json', '.webmani
 
 const SECURITY_HEADERS = {
   'x-content-type-options': 'nosniff',
+  // https only from the first secure visit on (browsers ignore it over plain http, where the page
+  // moves itself over: main.ts).
+  'strict-transport-security': 'max-age=31536000',
   'referrer-policy': 'no-referrer',
   'cross-origin-opener-policy': 'same-origin',
   'permissions-policy': 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
