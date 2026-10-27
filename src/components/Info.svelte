@@ -1,14 +1,38 @@
 <!--
-  The (i) after a heading in the setup: its hint is the browser's tooltip on hover, and a click or a
-  tap shows it under the heading until the next one. It keeps the setup inside the window.
+  The (i) after a heading in the setup: its hint shows under the heading while the pointer rests on
+  it or the keyboard is on it, and a click or a tap keeps it there until the next one. It keeps the
+  setup inside the window.
 -->
 <script lang="ts">
   import InfoIcon from '@lucide/svelte/icons/info';
 
-  let { text, about, open = $bindable(false) }: { text: string; about: string; open?: boolean } = $props();
+  let { about, open = $bindable(false) }: { about: string; open?: boolean } = $props();
+
+  let hovering = false;
+  let focused = false;
+  let pinned = false;
+  const sync = () => (open = hovering || focused || pinned);
+
+  function click() {
+    // A click on a hint that's showing keeps it; a click on a kept one puts it away, pointer or not.
+    if (pinned) pinned = hovering = focused = false;
+    else pinned = true;
+    sync();
+  }
 </script>
 
-<button type="button" class="info" class:open title={text} aria-label={about} aria-expanded={open} onclick={() => (open = !open)}>
+<button
+  type="button"
+  class="info"
+  class:open
+  aria-label={about}
+  aria-expanded={open}
+  onpointerenter={(e) => e.pointerType === 'mouse' && ((hovering = true), sync())}
+  onpointerleave={() => ((hovering = false), sync())}
+  onfocus={(e) => e.currentTarget.matches(':focus-visible') && ((focused = true), sync())}
+  onblur={() => ((focused = false), sync())}
+  onclick={click}
+>
   <InfoIcon size={14} aria-hidden="true" />
 </button>
 

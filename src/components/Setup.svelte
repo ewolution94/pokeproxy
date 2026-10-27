@@ -54,7 +54,7 @@
   <section>
     <div class="head">
       <h3 class="label">{t('setup.card')}</h3>
-      {#if !s.custom}<Info text={t('setup.standardHint')} about={t('setup.about', { what: t('setup.card') })} bind:open={tips.card} />{/if}
+      {#if !s.custom}<Info about={t('setup.about', { what: t('setup.card') })} bind:open={tips.card} />{/if}
     </div>
     <ewo-segmented size="sm" stretch label={t('setup.card')} value={s.custom ? 'custom' : 'standard'} onchange={(e) => sheet.change({ custom: e.detail.value === 'custom' })}>
       <option value="standard">{t('setup.standard')}</option>
@@ -87,7 +87,7 @@
   <section>
     <div class="head">
       <h3 class="label">{t('setup.gap')}</h3>
-      <Info text={t('setup.gapHint')} about={t('setup.about', { what: t('setup.gap') })} bind:open={tips.gap} />
+      <Info about={t('setup.about', { what: t('setup.gap') })} bind:open={tips.gap} />
       <span class="value ewo-mono">{mm(s.gap)}</span>
     </div>
     {#if tips.gap}<p class="hint">{t('setup.gapHint')}</p>{/if}
@@ -116,7 +116,7 @@
   <section>
     <div class="head">
       <h3 class="label">{t('setup.style')}</h3>
-      <Info text={t('setup.printTip')} about={t('setup.about', { what: t('setup.style') })} bind:open={tips.style} />
+      <Info about={t('setup.about', { what: t('setup.style') })} bind:open={tips.style} />
     </div>
     {#if tips.style}<p class="hint">{t('setup.printTip')}</p>{/if}
     <ewo-segmented size="sm" stretch label={t('setup.style')} value={s.style} onchange={(e) => sheet.change({ style: e.detail.value as PrintStyle })}>
@@ -129,7 +129,7 @@
   <section aria-labelledby="labels-title">
     <div class="head">
       <h3 class="label" id="labels-title">{t('setup.labels')}</h3>
-      <Info text={`${t('setup.labelsHint')} ${t('label.hint')}`} about={t('setup.about', { what: t('setup.labels') })} bind:open={tips.labels} />
+      <Info about={t('setup.about', { what: t('setup.labels') })} bind:open={tips.labels} />
       <button type="button" class="link" onclick={() => sheet.setSheetLabel(DEFAULT_LABEL)}>{t('label.reset')}</button>
     </div>
     {#if tips.labels}<p class="hint">{t('setup.labelsHint')} {t('label.hint')}</p>{/if}
