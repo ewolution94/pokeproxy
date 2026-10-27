@@ -1,10 +1,12 @@
 <!--
   The sticky header: the name, how much is on the sheet, the setup (where it isn't a column of
-  its own), Print and the settings button (Folio's, the same in every app).
+  its own), Share (a link or a file, ShareMenu), Print and the settings button (Folio's, the same in
+  every app).
 -->
 <script lang="ts">
   import Printer from '@lucide/svelte/icons/printer';
   import Sliders from '@lucide/svelte/icons/ruler-dimension-line';
+  import ShareMenu from './ShareMenu.svelte';
   import { printSheet } from '../lib/actions.svelte.ts';
   import { ui } from '../lib/prefs.svelte.ts';
   import { sheet } from '../lib/sheet.svelte.ts';
@@ -28,6 +30,7 @@
         <span>{t('header.setup')}</span>
       </button>
     {/if}
+    <ShareMenu />
     <button type="button" class="print" onclick={printSheet} disabled={!sheet.cardCount}>
       <Printer size={16} aria-hidden="true" />
       <span>{t('header.print')}</span>

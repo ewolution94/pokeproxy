@@ -102,8 +102,8 @@ class Sheet {
   slots = $state<(Card | null)[]>([]);
   /** The slot the next card goes into. */
   selected = $state<number | null>(0);
-  /** The last change that removed something, for Undo. */
-  #undo: (Card | null)[] | null = null;
+  /** The last change that removed something, for Undo; opening a sheet keeps the setup too. */
+  #undo: { slots: (Card | null)[]; setup?: Setup } | null = null;
   /** The last placing: the slot its first card went into, and a counter that tells two apart. */
   placed = $state<{ at: number; n: number } | null>(null);
   /** A slot to light up for a moment (a card just placed from the phone's card sheet). */
@@ -262,12 +262,27 @@ class Sheet {
 
   undo() {
     if (!this.#undo) return;
-    this.slots = padToPages(this.#undo, this.geometry.perPage);
+    if (this.#undo.setup) this.setup = this.#undo.setup;
+    this.slots = padToPages(this.#undo.slots, this.geometry.perPage);
     this.#undo = null;
+    if (this.selected != null && this.selected >= this.slots.length) this.selected = this.firstEmpty(0);
   }
 
-  #remember() {
-    this.#undo = this.slots.slice();
+  #remember(setup = false) {
+    this.#undo = { slots: this.slots.slice(), setup: setup ? this.setup : undefined };
+  }
+
+  /**
+   * Replaces the whole sheet, setup and cards, with one from a file or a link (share.ts); Undo
+   * brings this one back. What it holds is checked like the sheet kept on the device.
+   */
+  open(raw: { setup?: unknown; slots?: unknown }) {
+    this.#remember(true);
+    const setup = cleanSetup(raw.setup);
+    const slots = Array.isArray(raw.slots) ? raw.slots.slice(0, 2000).map(cleanCard) : [];
+    this.setup = setup;
+    this.slots = trimPages(slots, layout(setup).perPage);
+    this.selected = this.firstEmpty(0);
   }
 
   /** The look a card's label is drawn in: its own, or the sheet's. */
@@ -307,7 +322,7 @@ class Sheet {
   files(): Set<string> {
     const keys = new Set<string>();
     for (const c of this.slots) if (c?.file) keys.add(c.file);
-    for (const c of this.#undo ?? []) if (c?.file) keys.add(c.file);
+    for (const c of this.#undo?.slots ?? []) if (c?.file) keys.add(c.file);
     return keys;
   }
 }

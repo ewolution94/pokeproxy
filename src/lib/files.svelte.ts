@@ -65,6 +65,11 @@ export function fileUrl(key: string): string | undefined {
   return urls[key];
 }
 
+/** The picture itself, for a saved sheet (share.ts); undefined if it's gone. */
+export async function readFile(key: string): Promise<Blob | undefined> {
+  return (await run<Blob>('readonly', (st) => st.get(key))) ?? memory.get(key);
+}
+
 /** Forgets every picture no slot uses any more. */
 export async function prune(keep: Set<string>) {
   const keys = (await run<IDBValidKey[]>('readonly', (s) => s.getAllKeys())) ?? [];

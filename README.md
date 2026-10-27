@@ -59,7 +59,15 @@ one does: its image servers get a cardmarket.com referrer, without which they re
 pictures are small (255 px wide); the card panel says what a picture of its own prints at. `⌘V` on the sheet pastes a link or a picture into the selected
 slot; pictures dropped on a slot land there.
 
-**Uploads** never leave the device.
+**Uploads** never leave the device, unless a sheet is saved as a file.
+
+**Share** (the header, `src/lib/share.ts` for the format, `src/lib/sharing.ts` for the rest). *Copy
+link* puts the whole sheet in the address after `#s=` (deflated JSON in base64url, about 500
+characters for a page), so the server stores nothing and never sees it, Census included. A link
+carries the setup and the catalogue and link cards; a link card's picture is fetched again from its
+link when the sheet opens, and uploads stay behind as empty slots. *Save as a file* writes
+`pokeproxy-<day>.json` with everything, uploaded and fetched pictures inside as data URLs. Opening
+either (a link, or *Open a file*) replaces the sheet, setup and all; Undo brings the old one back.
 
 ## Run it
 
@@ -97,7 +105,8 @@ server/localized.mjs  a card's picture in another language, from TCGdex
 server/species.json   every Pokémon's name in nine languages (scripts/species.mjs)
 src/lib/layout.ts     paper, card size, grid, cut marks, scale check (millimetres)
 src/lib/sheet.svelte.ts  the setup and the slots, kept on the device
-src/components/       Header, Setup (with the labels every card follows), Pages (the paper),
+src/lib/share.ts      a sheet as a file or a link (the format); sharing.ts saves and opens them
+src/components/       Header (with ShareMenu), Setup (with the labels every card follows), Pages (the paper),
                       Picker (the selected card; Search, Link, Upload), LabelControls, Settings
 tests/                node --test
 ```

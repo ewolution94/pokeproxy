@@ -14,6 +14,7 @@
   import Settings from './components/Settings.svelte';
   import { untrack } from 'svelte';
   import { placeFilesWithNote, placeLink, tidyFiles } from './lib/actions.svelte.ts';
+  import { openSharedLink } from './lib/sharing.ts';
   import { isPicture } from './lib/files.svelte.ts';
   import { prefs, ui } from './lib/prefs.svelte.ts';
   import { sheet } from './lib/sheet.svelte.ts';
@@ -29,6 +30,11 @@
   let search: HTMLInputElement | undefined = $state();
   let colWidth = $state(0);
   let colHeight = $state(0);
+
+  // Opened with a shared link (#s=…): its sheet takes this one's place, with Undo.
+  void openSharedLink();
+  // A shared link pasted into this tab's address bar changes only what follows #.
+  addEventListener('hashchange', () => void openSharedLink());
 
   // The sheets close themselves once their column is back.
   $effect(() => {
