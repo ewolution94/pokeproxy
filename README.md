@@ -93,6 +93,7 @@ No volume: the server keeps nothing.
 | `POKEPROXY_TCGSL_IMAGES` | `https://tcgsl.ewolution.cloud` | where the page loads the pictures from (also in the CSP) |
 | `POKEPROXY_REFRESH` | `24` | hours between catalogue reloads; `off` loads none (CI) |
 | `POKEPROXY_CENSUS` | – | Census's ingest origin for visit counts |
+| `DASHBOARD_URL` | – | Dashboard's apps' port, `http://dashboard:8081` on the NAS: the language and theme a device that hasn't picked starts from (the family's, or PokeProxy's own). Off or down: the built-in ones, as before |
 
 ## Layout
 

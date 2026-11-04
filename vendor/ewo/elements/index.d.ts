@@ -1,5 +1,12 @@
 export { EwoSegmented, type SegmentedOption } from './segmented';
 export { EwoSwitch } from './switch';
+export { EwoButton } from './button';
+export { EwoField } from './field';
+export { EwoTable } from './table';
+export { EwoReorder } from './reorder';
+export { moveItem } from './reorder-math';
+export { EwoTileGrid } from './tile-grid';
+export { arrange as arrangeTiles, compact as compactTiles, firstFree as firstFreeTile, pack as packTiles, hasGaps as tilesHaveGaps, type Rect as TileRect, type Tiles } from './tile-grid-math';
 export { EwoSlider } from './slider';
 export { snap, valueAt, fractionOf, scaleOf, type Scale as SliderScale } from './slider-scale';
 export { EwoBadge } from './badge';
@@ -23,6 +30,7 @@ export { EwoSettingsBasics, type LanguageChoice, type ThemeChoice as SettingsThe
 export { EwoEmblem } from './emblem';
 export { EwoEmblemMaker } from './emblem-maker';
 export { cleanEmblem, emblemFromSeed, emblemNames, emblemRanges, emblemSvg, isEmblem, randomEmblem, type EmblemThemeId } from './emblem-core';
+export { playerEmblem, relatedEmblem, shareEmblem, sharedEmblem, shareName, sharedName } from './emblem-shared';
 export { effectiveTheme, onThemeChange } from './base';
 export { askTilt, tilt, type TiltOptions } from './card-tilt';
 export { fanLayout, fanTransform, cardAt, flightTransform, type Fan, type FanOptions, type FanPlace } from './card-fan';

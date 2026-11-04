@@ -10,14 +10,15 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# The server has zero dependencies, so the runtime image is just Node + the built app.
-# PokeProxy keeps no state on the server: the catalogue is read from TCGSL into memory, and
-# every sheet lives on its device.
+# The server has zero dependencies, so the runtime image is just Node + the built app, plus
+# Folio's config helper (Dashboard's defaults). PokeProxy keeps no state on the server: the
+# catalogue is read from TCGSL into memory, and every sheet lives on its device.
 FROM node:24-alpine
 WORKDIR /app
 ENV NODE_ENV=production PORT=8080 TZ=Europe/Berlin
 COPY --from=build /app/dist ./dist
 COPY server ./server
+COPY vendor/ewo/elements/config-server.js vendor/ewo/elements/config-core.js ./vendor/ewo/elements/
 COPY package.json ./
 USER node
 EXPOSE 8080
